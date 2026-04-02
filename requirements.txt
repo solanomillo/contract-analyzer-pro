@@ -1,0 +1,24 @@
+# Core
+python-dotenv==1.0.1
+pdfplumber==0.11.9
+pypdf==5.1.0
+
+# AI
+langchain==0.3.13
+langchain-google-genai==2.0.4
+langgraph==0.2.59
+faiss-cpu==1.8.0
+
+# Text
+tiktoken==0.7.0
+chardet==5.2.0
+
+# UI
+customtkinter==5.2.2
+Pillow==10.4.0
+
+# Utils
+loguru==0.7.2
+pydantic==2.9.2
+tenacity==8.5.0
+requests==2.32.3

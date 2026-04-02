@@ -1,0 +1,1 @@
+"""Domain models for the contract analyzer."""
