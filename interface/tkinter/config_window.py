@@ -5,6 +5,7 @@ Permite ingresar API key y seleccionar modelos.
 
 import threading
 import logging
+import os
 from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox
@@ -23,21 +24,21 @@ class ConfigWindow:
     - Ingresar API key de Gemini
     - Ver modelos disponibles
     - Seleccionar modelo de chat y embedding
-    - Probar la conexion
+    - Guardar configuracion y continuar
     """
     
     def __init__(self):
         """Inicializa la ventana de configuracion."""
         self.root = ctk.CTk()
-        self.root.title("Contract Analyzer Pro - Configuracion")
-        self.root.geometry("700x650")
+        self.root.title("Contract Analyzer Pro - Configuracion Inicial")
+        self.root.geometry("750x700")
         self.root.resizable(False, False)
         
         # Centrar ventana
         self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (700 // 2)
-        y = (self.root.winfo_screenheight() // 2) - (650 // 2)
-        self.root.geometry(f"700x650+{x}+{y}")
+        x = (self.root.winfo_screenwidth() // 2) - (750 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (700 // 2)
+        self.root.geometry(f"750x700+{x}+{y}")
         
         # Configurar tema
         self.colores = configurar_tema()
@@ -49,12 +50,10 @@ class ConfigWindow:
         self.client = None
         self.modelos_chat = []
         self.modelos_embedding = []
+        self.api_key_validada = False
         
         # Construir UI
         self._build_ui()
-        
-        # Cargar configuracion existente
-        self._cargar_configuracion_existente()
     
     def _build_ui(self):
         """Construye la interfaz de usuario."""
@@ -69,7 +68,7 @@ class ConfigWindow:
         
         subtitulo = ctk.CTkLabel(
             main_frame,
-            text="Configuracion inicial del sistema",
+            text="Configuracion inicial - Ingresa tu API key de Gemini",
             font=ctk.CTkFont(size=14),
             text_color="#888888"
         )
@@ -96,18 +95,18 @@ class ConfigWindow:
             card_api,
             textvariable=self.api_key_var,
             placeholder_text="Ingresa tu API key",
-            width=400,
+            width=450,
             show="*"
         )
         self.api_key_entry.pack(anchor="w", padx=20, pady=(0, 10))
         
-        # Botones API Key
+        # Frame para botones de API key
         btn_frame = ctk.CTkFrame(card_api, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=(0, 20))
         
         self.btn_validar = ctk.CTkButton(
             btn_frame,
-            text="Validar API Key",
+            text="✓ Validar API Key",
             command=self._validar_api_key,
             width=150,
             fg_color=self.colores["secondary"],
@@ -153,9 +152,9 @@ class ConfigWindow:
         
         self.combo_chat = ctk.CTkComboBox(
             self.card_modelos,
-            values=["Cargando modelos..."],
+            values=["Primero valida tu API key"],
             variable=self.modelo_chat_var,
-            width=400,
+            width=450,
             state="disabled"
         )
         self.combo_chat.pack(anchor="w", padx=20, pady=(0, 10))
@@ -169,24 +168,24 @@ class ConfigWindow:
         
         self.combo_embedding = ctk.CTkComboBox(
             self.card_modelos,
-            values=["Cargando modelos..."],
+            values=["Primero valida tu API key"],
             variable=self.modelo_embedding_var,
-            width=400,
+            width=450,
             state="disabled"
         )
         self.combo_embedding.pack(anchor="w", padx=20, pady=(0, 10))
         
-        # Boton probar modelo
-        self.btn_probar = ctk.CTkButton(
+        # Boton para refrescar modelos
+        self.btn_refrescar = ctk.CTkButton(
             self.card_modelos,
-            text="Probar Modelo Seleccionado",
-            command=self._probar_modelo,
-            width=200,
+            text="🔄 Refrescar Modelos",
+            command=self._refrescar_modelos,
+            width=150,
             fg_color=self.colores["secondary"],
             hover_color=self.colores["secondary_hover"],
             state="disabled"
         )
-        self.btn_probar.pack(anchor="w", padx=20, pady=(10, 20))
+        self.btn_refrescar.pack(anchor="w", padx=20, pady=(10, 20))
         
         # Card de Resumen
         self.card_resumen = crear_card(main_frame)
@@ -235,22 +234,6 @@ class ConfigWindow:
         )
         self.btn_salir.pack(side="right", padx=(0, 10))
     
-    def _cargar_configuracion_existente(self):
-        """Carga configuracion existente del archivo .env."""
-        env_path = Path(".env")
-        if env_path.exists():
-            try:
-                with open(env_path, "r") as f:
-                    for linea in f:
-                        if linea.startswith("GEMINI_API_KEY="):
-                            api_key = linea.split("=", 1)[1].strip()
-                            self.api_key_var.set(api_key)
-                            # Auto-validar si hay API key
-                            self._validar_api_key()
-                            break
-            except Exception as e:
-                logger.error(f"Error cargando configuracion: {e}")
-    
     def _toggle_mostrar_api_key(self):
         """Muestra u oculta la API key."""
         if self.api_key_entry.cget("show") == "*":
@@ -270,7 +253,7 @@ class ConfigWindow:
         
         # Deshabilitar boton durante validacion
         self.btn_validar.configure(state="disabled", text="Validando...")
-        self.lbl_estado.configure(text="🔍 Validando API key...", text_color="#f39c12")
+        self.lbl_estado.configure(text="🔄 Validando API key...", text_color="#f39c12")
         
         def validar():
             try:
@@ -289,28 +272,43 @@ class ConfigWindow:
     
     def _on_validacion_exitosa(self):
         """Maneja validacion exitosa."""
-        self.btn_validar.configure(state="normal", text="Validar API Key")
+        self.api_key_validada = True
+        self.btn_validar.configure(state="normal", text="✓ Validar API Key")
         self.lbl_estado.configure(text="✅ API key valida", text_color="#2ecc71")
         
         # Habilitar seleccion de modelos
         self.combo_chat.configure(state="readonly")
         self.combo_embedding.configure(state="readonly")
+        self.btn_refrescar.configure(state="normal")
+        
+        # Habilitar boton guardar
+        self.btn_guardar.configure(state="normal")
         
         # Cargar modelos disponibles
         self._cargar_modelos()
     
     def _on_validacion_fallida(self, error):
         """Maneja validacion fallida."""
-        self.btn_validar.configure(state="normal", text="Validar API Key")
+        self.api_key_validada = False
+        self.btn_validar.configure(state="normal", text="✓ Validar API Key")
         self.lbl_estado.configure(text=f"❌ Error: {error}", text_color="#e74c3c")
         
-        self.combo_chat.configure(values=["Validar API key primero"], state="disabled")
-        self.combo_embedding.configure(values=["Validar API key primero"], state="disabled")
+        self.combo_chat.configure(values=["Valida tu API key primero"], state="disabled")
+        self.combo_embedding.configure(values=["Valida tu API key primero"], state="disabled")
+        self.btn_refrescar.configure(state="disabled")
+        self.btn_guardar.configure(state="disabled")
+    
+    def _refrescar_modelos(self):
+        """Refresca la lista de modelos."""
+        if not self.client:
+            messagebox.showwarning("Advertencia", "Primero valida tu API key")
+            return
+        
+        self.lbl_estado.configure(text="🔄 Refrescando modelos...", text_color="#f39c12")
+        self._cargar_modelos()
     
     def _cargar_modelos(self):
         """Carga los modelos disponibles en segundo plano."""
-        self.lbl_estado.configure(text="🔄 Cargando modelos disponibles...", text_color="#f39c12")
-        
         def cargar():
             try:
                 modelos_chat = self.client.listar_modelos_chat()
@@ -337,6 +335,8 @@ class ConfigWindow:
                 self.modelo_chat_var.set("gemini-2.5-flash")
             else:
                 self.modelo_chat_var.set(nombres_chat[0])
+        else:
+            self.combo_chat.configure(values=["No se encontraron modelos"])
         
         # Actualizar combo embedding
         nombres_embedding = [m.nombre for m in modelos_embedding]
@@ -345,11 +345,12 @@ class ConfigWindow:
             # Seleccionar gemini-embedding-2-preview por defecto
             if "gemini-embedding-2-preview" in nombres_embedding:
                 self.modelo_embedding_var.set("gemini-embedding-2-preview")
+            elif "gemini-embedding-001" in nombres_embedding:
+                self.modelo_embedding_var.set("gemini-embedding-001")
             else:
                 self.modelo_embedding_var.set(nombres_embedding[0])
-        
-        # Habilitar boton probar
-        self.btn_probar.configure(state="normal")
+        else:
+            self.combo_embedding.configure(values=["No se encontraron modelos"])
         
         # Actualizar resumen
         self._actualizar_resumen()
@@ -358,63 +359,60 @@ class ConfigWindow:
     
     def _actualizar_resumen(self):
         """Actualiza el resumen de configuracion."""
+        api_key = self.api_key_var.get()
+        api_key_masked = api_key[:10] + "..." + api_key[-5:] if len(api_key) > 15 else api_key
+        
         resumen = f"""
-    API Key: {self.api_key_var.get()[:10]}...{self.api_key_var.get()[-5:] if len(self.api_key_var.get()) > 15 else ''}
-    Modelo Chat: {self.modelo_chat_var.get()}
-    Modelo Embedding: {self.modelo_embedding_var.get()}
-    """
+API Key: {api_key_masked}
+Estado: ✅ Valida
+
+Modelo Chat: {self.modelo_chat_var.get()}
+Modelo Embedding: {self.modelo_embedding_var.get()}
+"""
         self.lbl_resumen.configure(text=resumen, text_color="#ffffff")
-        self.btn_guardar.configure(state="normal")
-    
-    def _probar_modelo(self):
-        """Prueba el modelo seleccionado."""
-        modelo = self.modelo_chat_var.get()
-        
-        self.btn_probar.configure(state="disabled", text="Probando...")
-        self.lbl_estado.configure(text=f"🔄 Probando modelo {modelo}...", text_color="#f39c12")
-        
-        def probar():
-            try:
-                exito = self.client.probar_modelo(modelo, "Responde solo con OK si funcionas")
-                
-                if exito:
-                    self.root.after(0, self._on_prueba_exitosa)
-                else:
-                    self.root.after(0, self._on_prueba_fallida)
-                    
-            except Exception as e:
-                self.root.after(0, self._on_prueba_fallida, str(e))
-        
-        threading.Thread(target=probar, daemon=True).start()
-    
-    def _on_prueba_exitosa(self):
-        """Maneja prueba exitosa."""
-        self.btn_probar.configure(state="normal", text="Probar Modelo Seleccionado")
-        self.lbl_estado.configure(text="✅ Modelo funciona correctamente", text_color="#2ecc71")
-        messagebox.showinfo("Exito", "El modelo seleccionado funciona correctamente")
-    
-    def _on_prueba_fallida(self, error=None):
-        """Maneja prueba fallida."""
-        self.btn_probar.configure(state="normal", text="Probar Modelo Seleccionado")
-        self.lbl_estado.configure(text=f"❌ Error en el modelo", text_color="#e74c3c")
-        messagebox.showerror("Error", f"El modelo no responde correctamente\n{error if error else ''}")
     
     def _guardar_y_continuar(self):
         """Guarda configuracion y continua a la ventana principal."""
+        if not self.api_key_validada:
+            messagebox.showwarning("Advertencia", "Primero valida tu API key")
+            return
+        
         api_key = self.api_key_var.get().strip()
         modelo_chat = self.modelo_chat_var.get()
         modelo_embedding = self.modelo_embedding_var.get()
         
-        # Guardar configuracion
-        client = GeminiClient(api_key=api_key)
-        if client.guardar_configuracion(modelo_chat, modelo_embedding):
-            messagebox.showinfo("Exito", "Configuracion guardada correctamente")
+        # Guardar configuracion en .env
+        try:
+            env_path = Path(".env")
+            contenido = f"""# Google Gemini API Configuration
+GEMINI_API_KEY={api_key}
+GEMINI_MODEL={modelo_chat}
+GEMINI_EMBEDDING_MODEL={modelo_embedding}
+
+# Application Configuration
+VECTOR_DB_PATH=./data/vector_store
+LOG_LEVEL=INFO
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+"""
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.write(contenido.strip())
+            
+            messagebox.showinfo(
+                "Exito", 
+                "✅ Configuracion guardada correctamente\n\nLa aplicacion se iniciara con los modelos seleccionados."
+            )
+            
+            # Cerrar ventana de configuracion
             self.root.destroy()
             
-            # Aqui se abrira la ventana principal (FASE 2)
-            print("\n[INFO] Configuracion completada. Abriendo aplicacion principal...")
-        else:
-            messagebox.showerror("Error", "No se pudo guardar la configuracion")
+            # Iniciar ventana principal
+            from interface.tkinter.main_window import MainWindow
+            app = MainWindow()
+            app.run()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar la configuracion:\n{e}")
     
     def run(self):
         """Ejecuta la ventana de configuracion."""
