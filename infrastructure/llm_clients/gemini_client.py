@@ -24,17 +24,9 @@ class ModeloInfo:
 class GeminiClient:
     """
     Cliente para interactuar con Gemini API.
-    
-    Maneja autenticacion, listado de modelos y generacion.
     """
     
     def __init__(self, api_key: Optional[str] = None):
-        """
-        Inicializa el cliente de Gemini.
-        
-        Args:
-            api_key: API key de Gemini (si no se proporciona, busca en .env)
-        """
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self._client = None
         self._modelos_chat = []
@@ -42,7 +34,6 @@ class GeminiClient:
     
     @property
     def client(self):
-        """Obtiene el cliente de Gemini (lazy loading)."""
         if self._client is None:
             if not self.api_key:
                 raise ValueError("API key no proporcionada")
@@ -51,55 +42,57 @@ class GeminiClient:
     
     def validar_api_key(self) -> bool:
         """
-        Valida que la API key sea correcta.
+        Valida que la API key sea correcta y tenga cuota.
         
         Returns:
             True si es valida, False en caso contrario
         """
         try:
             # Intentar listar modelos como prueba
-            _ = self.client.models.list()
+            list(self.client.models.list())
             return True
         except Exception as e:
-            logger.error(f"Error validando API key: {e}")
+            error_msg = str(e).lower()
+            if "quota" in error_msg or "exceeded" in error_msg:
+                logger.error(f"Cuota agotada: {e}")
+            elif "invalid" in error_msg or "unauthorized" in error_msg:
+                logger.error(f"API key invalida: {e}")
+            else:
+                logger.error(f"Error validando API key: {e}")
             return False
     
     def listar_modelos_chat(self) -> List[ModeloInfo]:
-        """
-        Lista los modelos disponibles para chat.
-        
-        Returns:
-            Lista de modelos de chat
-        """
+        """Lista los modelos disponibles para chat."""
         if self._modelos_chat:
             return self._modelos_chat
         
         try:
             modelos = self.client.models.list()
             
-            # Palabras clave para filtrar modelos de chat
-            palabras_chat = ["gemini", "flash", "pro"]
+            # Modelos validos para chat (filtrado)
+            modelos_validos = [
+                "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash",
+                "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro"
+            ]
             
             for modelo in modelos:
                 nombre = modelo.name
+                # Limpiar nombre (quitar "models/")
+                nombre_limpio = nombre.replace("models/", "")
                 
-                # Verificar si es modelo de chat
-                if any(p in nombre.lower() for p in palabras_chat):
-                    # Excluir embeddings
-                    if "embed" not in nombre.lower():
-                        descripcion = self._generar_descripcion(nombre)
+                # Verificar si es modelo de chat valido
+                if any(v in nombre_limpio for v in modelos_validos):
+                    if "embed" not in nombre_limpio.lower():
+                        descripcion = self._generar_descripcion(nombre_limpio)
                         self._modelos_chat.append(ModeloInfo(
-                            nombre=nombre,
+                            nombre=nombre_limpio,
                             tipo="chat",
                             descripcion=descripcion
                         ))
             
-            # Ordenar: primero gemini-2.5-flash, luego gemini-2.5-pro
-            self._modelos_chat.sort(key=lambda x: (
-                0 if "2.5-flash" in x.nombre else 
-                1 if "2.5-pro" in x.nombre else 2,
-                x.nombre
-            ))
+            # Eliminar duplicados
+            vistos = set()
+            self._modelos_chat = [m for m in self._modelos_chat if m.nombre not in vistos and not vistos.add(m.nombre)]
             
             return self._modelos_chat
             
@@ -108,12 +101,7 @@ class GeminiClient:
             return []
     
     def listar_modelos_embedding(self) -> List[ModeloInfo]:
-        """
-        Lista los modelos disponibles para embeddings.
-        
-        Returns:
-            Lista de modelos de embedding
-        """
+        """Lista los modelos disponibles para embeddings."""
         if self._modelos_embedding:
             return self._modelos_embedding
         
@@ -122,12 +110,12 @@ class GeminiClient:
             
             for modelo in modelos:
                 nombre = modelo.name
+                nombre_limpio = nombre.replace("models/", "")
                 
-                # Verificar si es modelo de embedding
-                if "embed" in nombre.lower():
-                    descripcion = self._generar_descripcion_embedding(nombre)
+                if "embed" in nombre_limpio.lower():
+                    descripcion = self._generar_descripcion_embedding(nombre_limpio)
                     self._modelos_embedding.append(ModeloInfo(
-                        nombre=nombre,
+                        nombre=nombre_limpio,
                         tipo="embedding",
                         descripcion=descripcion
                     ))
@@ -139,36 +127,16 @@ class GeminiClient:
             return []
     
     def _generar_descripcion(self, nombre: str) -> str:
-        """
-        Genera descripcion para modelo de chat.
-        
-        Args:
-            nombre: Nombre del modelo
-            
-        Returns:
-            Descripcion del modelo
-        """
         if "2.5-flash" in nombre:
             return "Rapido, gratuito, ideal para uso diario"
         elif "2.5-pro" in nombre:
-            return "Mayor calidad, para analisis profundos (uso limitado)"
+            return "Mayor calidad, para analisis profundos"
         elif "2.0-flash" in nombre:
             return "Rapido y confiable"
-        elif "2.0-pro" in nombre:
-            return "Alta calidad"
         else:
             return "Modelo de lenguaje"
     
     def _generar_descripcion_embedding(self, nombre: str) -> str:
-        """
-        Genera descripcion para modelo de embedding.
-        
-        Args:
-            nombre: Nombre del modelo
-            
-        Returns:
-            Descripcion del modelo
-        """
         if "embedding-2" in nombre:
             return "Nuevo, mejor calidad para RAG"
         elif "embedding-001" in nombre:
@@ -177,16 +145,6 @@ class GeminiClient:
             return "Modelo de embeddings"
     
     def probar_modelo(self, modelo_nombre: str, mensaje: str = "Hola") -> bool:
-        """
-        Prueba un modelo especifico.
-        
-        Args:
-            modelo_nombre: Nombre del modelo a probar
-            mensaje: Mensaje de prueba
-            
-        Returns:
-            True si funciona correctamente
-        """
         try:
             response = self.client.models.generate_content(
                 model=modelo_nombre,
@@ -198,30 +156,19 @@ class GeminiClient:
             return False
     
     def guardar_configuracion(self, modelo_chat: str, modelo_embedding: str) -> bool:
-        """
-        Guarda la configuracion en .env.
-        
-        Args:
-            modelo_chat: Modelo de chat seleccionado
-            modelo_embedding: Modelo de embedding seleccionado
-            
-        Returns:
-            True si se guardo correctamente
-        """
         try:
             env_path = ".env"
-            contenido = f"""
-            # Gemini API Configuration
-            GEMINI_API_KEY={self.api_key}
-            GEMINI_MODEL={modelo_chat}
-            GEMINI_EMBEDDING_MODEL={modelo_embedding}
+            contenido = f"""# Gemini API Configuration
+GEMINI_API_KEY={self.api_key}
+GEMINI_MODEL={modelo_chat}
+GEMINI_EMBEDDING_MODEL={modelo_embedding}
 
-            # Application Configuration
-            VECTOR_DB_PATH=./data/vector_store
-            LOG_LEVEL=INFO
-            CHUNK_SIZE=1000
-            CHUNK_OVERLAP=200
-            """
+# Application Configuration
+VECTOR_DB_PATH=./data/vector_store
+LOG_LEVEL=INFO
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+"""
             with open(env_path, "w") as f:
                 f.write(contenido.strip())
             
