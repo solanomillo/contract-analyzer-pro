@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox
+import sys
 
 from interface.tkinter.components import FileUploadFrame, ProgressCard
 from interface.tkinter.styles import configurar_tema, crear_titulo, crear_card

@@ -5,7 +5,7 @@ Contract Analyzer Pro - Punto de entrada principal.
 import sys
 import os
 from pathlib import Path
-from dotenv import load_dotenv
+
 # Agregar proyecto al path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -18,7 +18,7 @@ def is_api_key_configured() -> bool:
     Returns:
         True si hay API key configurada, False en caso contrario
     """
-    
+    from dotenv import load_dotenv
     load_dotenv()
     
     api_key = os.getenv("GEMINI_API_KEY")

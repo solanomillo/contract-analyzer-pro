@@ -133,7 +133,7 @@ class ConfigWindow:
         )
         self.lbl_estado.pack(anchor="w", padx=20, pady=(0, 20))
         
-        # Card de Modelos (inicialmente deshabilitada)
+        # Card de Modelos
         self.card_modelos = crear_card(main_frame)
         self.card_modelos.pack(fill="x", pady=(0, 20))
         
@@ -142,6 +142,13 @@ class ConfigWindow:
             text="🤖 Seleccion de Modelos",
             font=ctk.CTkFont(size=16, weight="bold")
         ).pack(anchor="w", padx=20, pady=(20, 10))
+        
+        ctk.CTkLabel(
+            self.card_modelos,
+            text="Los modelos se cargaran automaticamente despues de validar tu API key",
+            font=ctk.CTkFont(size=12),
+            text_color="#888888"
+        ).pack(anchor="w", padx=20, pady=(0, 15))
         
         # Modelo de Chat
         ctk.CTkLabel(
@@ -152,10 +159,10 @@ class ConfigWindow:
         
         self.combo_chat = ctk.CTkComboBox(
             self.card_modelos,
-            values=["Primero valida tu API key"],
+            values=["Cargando..."],
             variable=self.modelo_chat_var,
             width=450,
-            state="disabled"
+            state="readonly"
         )
         self.combo_chat.pack(anchor="w", padx=20, pady=(0, 10))
         
@@ -168,24 +175,12 @@ class ConfigWindow:
         
         self.combo_embedding = ctk.CTkComboBox(
             self.card_modelos,
-            values=["Primero valida tu API key"],
+            values=["Cargando..."],
             variable=self.modelo_embedding_var,
             width=450,
-            state="disabled"
+            state="readonly"
         )
         self.combo_embedding.pack(anchor="w", padx=20, pady=(0, 10))
-        
-        # Boton para refrescar modelos
-        self.btn_refrescar = ctk.CTkButton(
-            self.card_modelos,
-            text="🔄 Refrescar Modelos",
-            command=self._refrescar_modelos,
-            width=150,
-            fg_color=self.colores["secondary"],
-            hover_color=self.colores["secondary_hover"],
-            state="disabled"
-        )
-        self.btn_refrescar.pack(anchor="w", padx=20, pady=(10, 20))
         
         # Card de Resumen
         self.card_resumen = crear_card(main_frame)
@@ -218,7 +213,7 @@ class ConfigWindow:
             fg_color=self.colores["primary"],
             hover_color=self.colores["primary_hover"],
             font=ctk.CTkFont(size=14, weight="bold"),
-            state="disabled"
+            state="disabled"  # Inicialmente deshabilitado
         )
         self.btn_guardar.pack(side="right")
         
@@ -274,15 +269,13 @@ class ConfigWindow:
         """Maneja validacion exitosa."""
         self.api_key_validada = True
         self.btn_validar.configure(state="normal", text="✓ Validar API Key")
-        self.lbl_estado.configure(text="✅ API key valida", text_color="#2ecc71")
+        self.lbl_estado.configure(text="✅ API key valida - Cargando modelos...", text_color="#2ecc71")
         
-        # Habilitar seleccion de modelos
-        self.combo_chat.configure(state="readonly")
-        self.combo_embedding.configure(state="readonly")
-        self.btn_refrescar.configure(state="normal")
-        
-        # Habilitar boton guardar
+        # Habilitar boton guardar INMEDIATAMENTE
         self.btn_guardar.configure(state="normal")
+        
+        # Actualizar resumen
+        self._actualizar_resumen()
         
         # Cargar modelos disponibles
         self._cargar_modelos()
@@ -293,19 +286,12 @@ class ConfigWindow:
         self.btn_validar.configure(state="normal", text="✓ Validar API Key")
         self.lbl_estado.configure(text=f"❌ Error: {error}", text_color="#e74c3c")
         
-        self.combo_chat.configure(values=["Valida tu API key primero"], state="disabled")
-        self.combo_embedding.configure(values=["Valida tu API key primero"], state="disabled")
-        self.btn_refrescar.configure(state="disabled")
+        # Asegurar que boton guardar esta deshabilitado
         self.btn_guardar.configure(state="disabled")
-    
-    def _refrescar_modelos(self):
-        """Refresca la lista de modelos."""
-        if not self.client:
-            messagebox.showwarning("Advertencia", "Primero valida tu API key")
-            return
         
-        self.lbl_estado.configure(text="🔄 Refrescando modelos...", text_color="#f39c12")
-        self._cargar_modelos()
+        # Resetear combos
+        self.combo_chat.configure(values=["Valida tu API key primero"])
+        self.combo_embedding.configure(values=["Valida tu API key primero"])
     
     def _cargar_modelos(self):
         """Carga los modelos disponibles en segundo plano."""
@@ -317,7 +303,7 @@ class ConfigWindow:
                 self.root.after(0, self._actualizar_modelos, modelos_chat, modelos_embedding)
                 
             except Exception as e:
-                self.root.after(0, self._on_validacion_fallida, f"Error cargando modelos: {e}")
+                self.root.after(0, self._on_error_cargando_modelos, str(e))
         
         threading.Thread(target=cargar, daemon=True).start()
     
@@ -327,27 +313,29 @@ class ConfigWindow:
         self.modelos_embedding = modelos_embedding
         
         # Actualizar combo chat
-        nombres_chat = [m.nombre for m in modelos_chat]
-        if nombres_chat:
+        if modelos_chat:
+            nombres_chat = [m.nombre for m in modelos_chat]
             self.combo_chat.configure(values=nombres_chat)
             # Seleccionar gemini-2.5-flash por defecto
             if "gemini-2.5-flash" in nombres_chat:
                 self.modelo_chat_var.set("gemini-2.5-flash")
-            else:
+            elif "gemini-2.0-flash" in nombres_chat:
+                self.modelo_chat_var.set("gemini-2.0-flash")
+            elif nombres_chat:
                 self.modelo_chat_var.set(nombres_chat[0])
         else:
             self.combo_chat.configure(values=["No se encontraron modelos"])
         
         # Actualizar combo embedding
-        nombres_embedding = [m.nombre for m in modelos_embedding]
-        if nombres_embedding:
+        if modelos_embedding:
+            nombres_embedding = [m.nombre for m in modelos_embedding]
             self.combo_embedding.configure(values=nombres_embedding)
             # Seleccionar gemini-embedding-2-preview por defecto
             if "gemini-embedding-2-preview" in nombres_embedding:
                 self.modelo_embedding_var.set("gemini-embedding-2-preview")
             elif "gemini-embedding-001" in nombres_embedding:
                 self.modelo_embedding_var.set("gemini-embedding-001")
-            else:
+            elif nombres_embedding:
                 self.modelo_embedding_var.set(nombres_embedding[0])
         else:
             self.combo_embedding.configure(values=["No se encontraron modelos"])
@@ -355,12 +343,23 @@ class ConfigWindow:
         # Actualizar resumen
         self._actualizar_resumen()
         
-        self.lbl_estado.configure(text="✅ Modelos cargados correctamente", text_color="#2ecc71")
+        self.lbl_estado.configure(text="✅ API key valida - Modelos cargados", text_color="#2ecc71")
+    
+    def _on_error_cargando_modelos(self, error):
+        """Maneja error al cargar modelos."""
+        self.lbl_estado.configure(text=f"⚠️ Error cargando modelos: {error}", text_color="#f39c12")
+        self.combo_chat.configure(values=["Error al cargar"])
+        self.combo_embedding.configure(values=["Error al cargar"])
+        # El boton guardar ya esta habilitado, solo mostramos el error
     
     def _actualizar_resumen(self):
         """Actualiza el resumen de configuracion."""
         api_key = self.api_key_var.get()
-        api_key_masked = api_key[:10] + "..." + api_key[-5:] if len(api_key) > 15 else api_key
+        # Mostrar solo los primeros y ultimos caracteres por seguridad
+        if len(api_key) > 15:
+            api_key_masked = api_key[:8] + "..." + api_key[-4:]
+        else:
+            api_key_masked = "*" * len(api_key)
         
         resumen = f"""
 API Key: {api_key_masked}
