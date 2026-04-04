@@ -8,6 +8,7 @@ langchain==0.3.13
 langchain-google-genai==2.0.4
 langgraph==0.2.59
 faiss-cpu==1.8.0
+google-generativeai
 
 # Text
 tiktoken==0.7.0
