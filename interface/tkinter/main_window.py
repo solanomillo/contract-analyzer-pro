@@ -4,6 +4,7 @@ Maneja la carga de PDF y visualizacion de resultados.
 """
 
 import logging
+import os
 from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox
@@ -37,6 +38,9 @@ class MainWindow:
         # Estado
         self.is_processing = False
         
+        # Verificar cuota de API al inicio
+        self._verificar_cuota_api()
+        
         # Construir UI
         self._build_ui()
         
@@ -45,6 +49,131 @@ class MainWindow:
         
         # Configurar cierre
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
+    
+    def _verificar_cuota_api(self):
+        """Verifica si la API key tiene cuota disponible."""
+        try:
+            from google import genai
+            import os
+            from dotenv import load_dotenv
+            
+            load_dotenv()
+            api_key = os.getenv("GEMINI_API_KEY")
+            
+            if not api_key:
+                self._mostrar_error_api_y_salir()
+                return
+            
+            client = genai.Client(api_key=api_key)
+            # Probar con una llamada simple
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents="responde solo OK"
+            )
+            
+            if "quota" in str(response).lower() or "exceeded" in str(response).lower():
+                self._mostrar_error_cuota()
+                
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "quota" in error_msg or "exceeded" in error_msg or "resource exhausted" in error_msg:
+                self._mostrar_error_cuota()
+            elif "invalid" in error_msg or "unauthorized" in error_msg:
+                self._mostrar_error_api_y_salir()
+    
+    def _mostrar_error_cuota(self):
+        """Muestra error de cuota agotada y ofrece cambiar API key."""
+        respuesta = messagebox.askyesno(
+            "Cuota de API Agotada",
+            "⚠️ La cuota de la API key actual se ha agotado.\n\n"
+            "¿Deseas ingresar una nueva API key?\n\n"
+            "Selecciona SI para cambiar la API key\n"
+            "Selecciona NO para salir de la aplicacion"
+        )
+        
+        if respuesta:
+            self._cambiar_api_key()
+        else:
+            self.root.quit()
+    
+    def _mostrar_error_api_y_salir(self):
+        """Muestra error de API key invalida y sale."""
+        messagebox.showerror(
+            "API Key Invalida",
+            "❌ La API key configurada no es valida.\n\n"
+            "La aplicacion se cerrara. Vuelve a abrirla para configurar una nueva API key."
+        )
+        self.root.quit()
+    
+    def _cambiar_api_key(self):
+        """Abre dialogo para cambiar la API key."""
+        dialog = ctk.CTkInputDialog(
+            text="Ingresa tu nueva API key de Gemini:\n\n(Obtén una gratis en https://makersuite.google.com/app/apikey)",
+            title="Cambiar API Key"
+        )
+        
+        nueva_api_key = dialog.get_input()
+        
+        if nueva_api_key and nueva_api_key.strip():
+            # Validar la nueva API key
+            try:
+                from google import genai
+                client = genai.Client(api_key=nueva_api_key.strip())
+                list(client.models.list())  # Probar conexion
+                
+                # Guardar en .env
+                self._guardar_api_key(nueva_api_key.strip())
+                
+                messagebox.showinfo(
+                    "Exito",
+                    "✅ API key actualizada correctamente.\n\n"
+                    "La aplicacion se reiniciara para aplicar los cambios."
+                )
+                
+                # Reiniciar aplicacion
+                self.root.quit()
+                os.startfile(sys.argv[0])  # Reiniciar
+                
+            except Exception as e:
+                messagebox.showerror(
+                    "Error",
+                    f"❌ La API key no es valida.\n\nError: {e}\n\nIntenta nuevamente."
+                )
+                self._cambiar_api_key()  # Reintentar
+    
+    def _guardar_api_key(self, nueva_api_key: str):
+        """Guarda la nueva API key en el archivo .env."""
+        env_path = Path(".env")
+        
+        if env_path.exists():
+            # Leer archivo existente
+            with open(env_path, 'r') as f:
+                lineas = f.readlines()
+            
+            # Actualizar linea de API key
+            nuevas_lineas = []
+            api_key_actualizada = False
+            
+            for linea in lineas:
+                if linea.startswith("GEMINI_API_KEY="):
+                    nuevas_lineas.append(f"GEMINI_API_KEY={nueva_api_key}\n")
+                    api_key_actualizada = True
+                else:
+                    nuevas_lineas.append(linea)
+            
+            if not api_key_actualizada:
+                nuevas_lineas.append(f"GEMINI_API_KEY={nueva_api_key}\n")
+            
+            # Escribir archivo
+            with open(env_path, 'w') as f:
+                f.writelines(nuevas_lineas)
+        else:
+            # Crear archivo nuevo
+            with open(env_path, 'w') as f:
+                f.write(f"GEMINI_API_KEY={nueva_api_key}\n")
+                f.write("GEMINI_MODEL=gemini-2.5-flash\n")
+                f.write("VECTOR_DB_PATH=./data/vector_store\n")
+                f.write("LOG_LEVEL=INFO\n")
     
     def _center_window(self):
         """Centra la ventana en la pantalla."""
@@ -90,14 +219,31 @@ class MainWindow:
         titulo = crear_titulo(header_frame, "CONTRACT ANALYZER PRO", 24)
         titulo.pack(side="left")
         
+        # Frame para botones de header
+        header_buttons = ctk.CTkFrame(header_frame, fg_color="transparent")
+        header_buttons.pack(side="right")
+        
+        # Boton para cambiar API key
+        self.btn_cambiar_api = ctk.CTkButton(
+            header_buttons,
+            text="🔑 Cambiar API Key",
+            command=self._cambiar_api_key,
+            width=140,
+            height=30,
+            fg_color=self.colores["warning"],
+            hover_color="#e67e22",
+            font=ctk.CTkFont(size=11)
+        )
+        self.btn_cambiar_api.pack(side="left", padx=(0, 10))
+        
         # Info de estado
         self.status_label = ctk.CTkLabel(
-            header_frame,
+            header_buttons,
             text="✅ Sistema listo",
             font=ctk.CTkFont(size=12),
             text_color="#2ecc71"
         )
-        self.status_label.pack(side="right")
+        self.status_label.pack(side="left")
     
     def _build_upload_area(self, parent):
         """Construye el area de carga de PDF."""
@@ -225,12 +371,7 @@ class MainWindow:
         self.btn_clear.pack(side="left", padx=(10, 0))
     
     def _on_file_selected(self, pdf_path: Path):
-        """
-        Maneja la seleccion de un archivo PDF.
-        
-        Args:
-            pdf_path: Ruta al PDF seleccionado
-        """
+        """Maneja la seleccion de un archivo PDF."""
         if self.is_processing:
             messagebox.showwarning("En proceso", "Ya hay un documento en procesamiento")
             return
@@ -310,7 +451,11 @@ class MainWindow:
         self.progress_card.hide()
         self.status_label.configure(text="❌ Error en procesamiento")
         
-        messagebox.showerror("Error de Procesamiento", f"No se pudo procesar el PDF:\n\n{error}")
+        # Verificar si el error es por cuota de API
+        if "quota" in error.lower() or "exceeded" in error.lower():
+            self._mostrar_error_cuota()
+        else:
+            messagebox.showerror("Error de Procesamiento", f"No se pudo procesar el PDF:\n\n{error}")
     
     def _update_contract_info(self, resultado: dict):
         """Actualiza la informacion del contrato."""
