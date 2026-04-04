@@ -9,7 +9,6 @@ from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox
 
-from interface.tkinter.styles import configurar_tema, crear_titulo, crear_card
 from infrastructure.llm_clients.gemini_client import GeminiClient
 
 logger = logging.getLogger(__name__)
@@ -24,17 +23,14 @@ class ConfigWindow:
         """Inicializa la ventana de configuracion."""
         self.root = ctk.CTk()
         self.root.title("Contract Analyzer Pro - Configuracion Inicial")
-        self.root.geometry("700x600")
+        self.root.geometry("600x550")
         self.root.resizable(False, False)
         
         # Centrar ventana
         self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (700 // 2)
-        y = (self.root.winfo_screenheight() // 2) - (600 // 2)
-        self.root.geometry(f"700x600+{x}+{y}")
-        
-        # Configurar tema
-        self.colores = configurar_tema()
+        x = (self.root.winfo_screenwidth() // 2) - (600 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (550 // 2)
+        self.root.geometry(f"600x550+{x}+{y}")
         
         # Variables
         self.api_key_var = ctk.StringVar()
@@ -50,66 +46,71 @@ class ConfigWindow:
         """Construye la interfaz de usuario."""
         
         # Frame principal
-        main_frame = ctk.CTkFrame(self.root, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=30, pady=30)
+        main_frame = ctk.CTkFrame(self.root)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         # Titulo
-        titulo = crear_titulo(main_frame, "CONTRACT ANALYZER PRO", 28)
-        titulo.pack(pady=(0, 10))
+        titulo = ctk.CTkLabel(
+            main_frame,
+            text="CONTRACT ANALYZER PRO",
+            font=ctk.CTkFont(size=24, weight="bold"),
+            text_color="#2ecc71"
+        )
+        titulo.pack(pady=(10, 5))
         
         subtitulo = ctk.CTkLabel(
             main_frame,
-            text="Configuracion inicial - Ingresa tu API key de Gemini",
-            font=ctk.CTkFont(size=13),
+            text="Configuracion inicial",
+            font=ctk.CTkFont(size=14),
             text_color="#888888"
         )
-        subtitulo.pack(pady=(0, 30))
+        subtitulo.pack(pady=(0, 20))
         
-        # Card de API Key
-        card_api = crear_card(main_frame)
-        card_api.pack(fill="x", pady=(0, 20))
+        # Separador
+        separator = ctk.CTkFrame(main_frame, height=1, fg_color="#3d3d3d")
+        separator.pack(fill="x", pady=(0, 20))
         
+        # Seccion API Key
         ctk.CTkLabel(
-            card_api,
+            main_frame,
             text="🔑 Gemini API Key",
             font=ctk.CTkFont(size=16, weight="bold")
-        ).pack(anchor="w", padx=20, pady=(20, 10))
+        ).pack(anchor="w", pady=(0, 5))
         
         ctk.CTkLabel(
-            card_api,
+            main_frame,
             text="Obtén tu API key gratis en: https://makersuite.google.com/app/apikey",
             font=ctk.CTkFont(size=11),
             text_color="#888888"
-        ).pack(anchor="w", padx=20, pady=(0, 10))
+        ).pack(anchor="w", pady=(0, 10))
         
         self.api_key_entry = ctk.CTkEntry(
-            card_api,
+            main_frame,
             textvariable=self.api_key_var,
             placeholder_text="Ingresa tu API key",
-            width=450,
+            width=400,
             height=40,
             show="*"
         )
-        self.api_key_entry.pack(anchor="w", padx=20, pady=(0, 10))
+        self.api_key_entry.pack(fill="x", pady=(0, 10))
         
-        # Frame para botones de API key
-        btn_frame = ctk.CTkFrame(card_api, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=20, pady=(0, 20))
+        # Botones de API key
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(0, 15))
         
         self.btn_validar = ctk.CTkButton(
             btn_frame,
-            text="✓ Validar API Key",
+            text="Validar API Key",
             command=self._validar_api_key,
             width=150,
             height=35,
-            fg_color=self.colores["secondary"],
-            hover_color=self.colores["secondary_hover"]
+            fg_color="#3498db"
         )
         self.btn_validar.pack(side="left", padx=(0, 10))
         
         self.btn_mostrar = ctk.CTkButton(
             btn_frame,
-            text="👁️ Mostrar",
+            text="Mostrar",
             command=self._toggle_mostrar_api_key,
             width=100,
             height=35,
@@ -119,76 +120,80 @@ class ConfigWindow:
         )
         self.btn_mostrar.pack(side="left")
         
-        # Estado de validacion
+        # Estado
         self.lbl_estado = ctk.CTkLabel(
-            card_api,
+            main_frame,
             text="",
             font=ctk.CTkFont(size=12)
         )
-        self.lbl_estado.pack(anchor="w", padx=20, pady=(0, 20))
+        self.lbl_estado.pack(anchor="w", pady=(0, 15))
         
-        # Card de Modelos
-        self.card_modelos = crear_card(main_frame)
-        self.card_modelos.pack(fill="x", pady=(0, 20))
+        # Separador
+        separator2 = ctk.CTkFrame(main_frame, height=1, fg_color="#3d3d3d")
+        separator2.pack(fill="x", pady=(0, 15))
         
+        # Seccion Modelos
         ctk.CTkLabel(
-            self.card_modelos,
+            main_frame,
             text="🤖 Seleccion de Modelos",
             font=ctk.CTkFont(size=16, weight="bold")
-        ).pack(anchor="w", padx=20, pady=(20, 10))
+        ).pack(anchor="w", pady=(0, 10))
         
-        # Modelo de Chat
+        # Modelo Chat
         ctk.CTkLabel(
-            self.card_modelos,
-            text="Modelo de Chat (LLM):",
+            main_frame,
+            text="Modelo de Chat:",
             font=ctk.CTkFont(size=13)
-        ).pack(anchor="w", padx=20, pady=(10, 5))
+        ).pack(anchor="w", pady=(5, 0))
         
         self.combo_chat = ctk.CTkComboBox(
-            self.card_modelos,
+            main_frame,
             values=["Valida tu API key primero"],
             variable=self.modelo_chat_var,
-            width=450,
+            width=400,
             state="readonly"
         )
-        self.combo_chat.pack(anchor="w", padx=20, pady=(0, 10))
+        self.combo_chat.pack(fill="x", pady=(5, 10))
         
-        # Modelo de Embedding
+        # Modelo Embedding
         ctk.CTkLabel(
-            self.card_modelos,
-            text="Modelo de Embedding (Vectores):",
+            main_frame,
+            text="Modelo de Embedding:",
             font=ctk.CTkFont(size=13)
-        ).pack(anchor="w", padx=20, pady=(10, 5))
+        ).pack(anchor="w", pady=(5, 0))
         
         self.combo_embedding = ctk.CTkComboBox(
-            self.card_modelos,
+            main_frame,
             values=["Valida tu API key primero"],
             variable=self.modelo_embedding_var,
-            width=450,
+            width=400,
             state="readonly"
         )
-        self.combo_embedding.pack(anchor="w", padx=20, pady=(0, 20))
+        self.combo_embedding.pack(fill="x", pady=(5, 10))
         
-        # Botones finales - IMPORTANTE: Aqui estan los botones de accion
-        btn_final_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        btn_final_frame.pack(fill="x", pady=(20, 0))
+        # Separador
+        separator3 = ctk.CTkFrame(main_frame, height=1, fg_color="#3d3d3d")
+        separator3.pack(fill="x", pady=(15, 15))
         
-        # Boton Guardar - Inicialmente deshabilitado
+        # BOTONES FINALES - AQUI ESTA EL BOTON GUARDAR
+        buttons_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        buttons_frame.pack(fill="x", pady=(0, 10))
+        
         self.btn_guardar = ctk.CTkButton(
-            btn_final_frame,
-            text="💾 Guardar y Continuar",
+            buttons_frame,
+            text="💾 GUARDAR Y CONTINUAR",
             command=self._guardar_y_continuar,
             width=200,
             height=45,
-            fg_color=self.colores["primary"],
-            hover_color=self.colores["primary_hover"],
+            fg_color="#2ecc71",
+            hover_color="#27ae60",
             font=ctk.CTkFont(size=14, weight="bold"),
             state="disabled"
         )
         self.btn_guardar.pack(side="right", padx=(10, 0))
         
         self.btn_salir = ctk.CTkButton(
-            btn_final_frame,
+            buttons_frame,
             text="Salir",
             command=self.root.quit,
             width=100,
@@ -203,10 +208,10 @@ class ConfigWindow:
         """Muestra u oculta la API key."""
         if self.api_key_entry.cget("show") == "*":
             self.api_key_entry.configure(show="")
-            self.btn_mostrar.configure(text="🙈 Ocultar")
+            self.btn_mostrar.configure(text="Ocultar")
         else:
             self.api_key_entry.configure(show="*")
-            self.btn_mostrar.configure(text="👁️ Mostrar")
+            self.btn_mostrar.configure(text="Mostrar")
     
     def _validar_api_key(self):
         """Valida la API key."""
@@ -218,7 +223,7 @@ class ConfigWindow:
         
         # Deshabilitar boton durante validacion
         self.btn_validar.configure(state="disabled", text="Validando...")
-        self.lbl_estado.configure(text="🔄 Validando API key...", text_color="#f39c12")
+        self.lbl_estado.configure(text="Validando API key...", text_color="#f39c12")
         
         def validar():
             try:
@@ -238,15 +243,16 @@ class ConfigWindow:
     def _on_validacion_exitosa(self):
         """Maneja validacion exitosa."""
         self.api_key_validada = True
-        
-        # Actualizar UI
-        self.btn_validar.configure(state="normal", text="✓ Validar API Key")
+        self.btn_validar.configure(state="normal", text="Validar API Key")
         self.lbl_estado.configure(text="✅ API key valida", text_color="#2ecc71")
         
-        # HABILITAR EL BOTON GUARDAR
+        # HABILITAR EL BOTON GUARDAR - ESTA ES LA LINEA CLAVE
         self.btn_guardar.configure(state="normal")
         
-        # Actualizar combos para mostrar que se puede cargar
+        # Cambiar texto del boton para confirmar
+        self.btn_guardar.configure(fg_color="#2ecc71")
+        
+        # Actualizar combos
         self.combo_chat.configure(values=["Cargando modelos..."])
         self.combo_embedding.configure(values=["Cargando modelos..."])
         
@@ -256,7 +262,7 @@ class ConfigWindow:
     def _on_validacion_fallida(self, error):
         """Maneja validacion fallida."""
         self.api_key_validada = False
-        self.btn_validar.configure(state="normal", text="✓ Validar API Key")
+        self.btn_validar.configure(state="normal", text="Validar API Key")
         self.lbl_estado.configure(text=f"❌ {error}", text_color="#e74c3c")
         
         # DESHABILITAR EL BOTON GUARDAR
@@ -297,6 +303,8 @@ class ConfigWindow:
             self.combo_embedding.configure(values=nombres_embedding)
             if "gemini-embedding-2-preview" in nombres_embedding:
                 self.modelo_embedding_var.set("gemini-embedding-2-preview")
+            elif "gemini-embedding-001" in nombres_embedding:
+                self.modelo_embedding_var.set("gemini-embedding-001")
             elif nombres_embedding:
                 self.modelo_embedding_var.set(nombres_embedding[0])
         
@@ -305,7 +313,6 @@ class ConfigWindow:
     def _on_error_modelos(self, error):
         """Maneja error cargando modelos."""
         self.lbl_estado.configure(text=f"⚠️ Error cargando modelos: {error}", text_color="#f39c12")
-        # El boton guardar ya esta habilitado, solo mostramos el error
     
     def _guardar_y_continuar(self):
         """Guarda configuracion y continua."""
