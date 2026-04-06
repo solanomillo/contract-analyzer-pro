@@ -3,7 +3,7 @@ Agente router que decide que agente usar segun la consulta.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from enum import Enum
 
 from application.agents.base_agent import BaseAgent, Hallazgo
