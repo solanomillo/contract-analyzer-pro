@@ -149,27 +149,42 @@ class MainWindow:
         self.info_text.insert("1.0", "Esperando carga de documento...")
         self.info_text.configure(state="disabled")
     
+    # En _build_preview_area, agregar seccion de preguntas
+
     def _build_preview_area(self, parent):
-        """Construye el area de preview."""
+        """Construye el area de preview y preguntas."""
+        
         preview_card = crear_card(parent)
         preview_card.pack(fill="both", expand=True)
         
-        ctk.CTkLabel(
-            preview_card,
-            text="📄 Vista Previa del Texto",
-            font=ctk.CTkFont(size=16, weight="bold")
-        ).pack(anchor="w", padx=20, pady=(20, 10))
+        # Pestañas
+        tabview = ctk.CTkTabview(preview_card)
+        tabview.pack(fill="both", expand=True, padx=20, pady=20)
         
-        self.progress_card = ProgressCard(preview_card)
+        # Pestaña de texto
+        tab_texto = tabview.add("📄 Texto del Contrato")
+        self._build_text_tab(tab_texto)
+        
+        # Pestaña de preguntas
+        tab_preguntas = tabview.add("❓ Preguntar al Contrato")
+        self._build_qa_tab(tab_preguntas)
+        
+        # Pestaña de analisis
+        tab_analisis = tabview.add("📊 Analisis Legal")
+        self._build_analysis_tab(tab_analisis)
+
+    def _build_text_tab(self, parent):
+        """Construye la pestaña de texto."""
+        self.progress_card = ProgressCard(parent)
         self.progress_card.hide()
         
-        self.preview_text = ctk.CTkTextbox(preview_card, wrap="word")
-        self.preview_text.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        self.preview_text = ctk.CTkTextbox(parent, wrap="word")
+        self.preview_text.pack(fill="both", expand=True)
         self.preview_text.insert("1.0", "El texto del contrato aparecera aqui...")
         self.preview_text.configure(state="disabled")
         
-        stats_frame = ctk.CTkFrame(preview_card, fg_color="transparent")
-        stats_frame.pack(fill="x", padx=20, pady=(0, 20))
+        stats_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        stats_frame.pack(fill="x", pady=(10, 0))
         
         self.stats_label = ctk.CTkLabel(
             stats_frame,
@@ -178,6 +193,66 @@ class MainWindow:
             text_color="#888888"
         )
         self.stats_label.pack()
+
+    def _build_qa_tab(self, parent):
+        """Construye la pestaña de preguntas y respuestas."""
+        # Area de pregunta
+        ctk.CTkLabel(
+            parent,
+            text="Haz una pregunta sobre el contrato:",
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(anchor="w", pady=(10, 5))
+        
+        self.question_entry = ctk.CTkTextbox(parent, height=80, wrap="word")
+        self.question_entry.pack(fill="x", pady=(0, 10))
+        self.question_entry.insert("1.0", "Ejemplo: Cuales son las penalizaciones por incumplimiento?")
+        
+        # Boton preguntar
+        self.btn_ask = ctk.CTkButton(
+            parent,
+            text="🔍 Preguntar",
+            command=self._ask_question,
+            width=150,
+            state="disabled"
+        )
+        self.btn_ask.pack(anchor="w", pady=(0, 15))
+        
+        # Area de respuesta
+        ctk.CTkLabel(
+            parent,
+            text="Respuesta:",
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(anchor="w", pady=(10, 5))
+        
+        self.answer_text = ctk.CTkTextbox(parent, wrap="word")
+        self.answer_text.pack(fill="both", expand=True)
+        self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
+        self.answer_text.configure(state="disabled")
+        
+        # Contexto usado
+        ctk.CTkLabel(
+            parent,
+            text="Contexto utilizado:",
+            font=ctk.CTkFont(size=12, weight="bold")
+        ).pack(anchor="w", pady=(10, 5))
+        
+        self.context_text = ctk.CTkTextbox(parent, height=100, wrap="word")
+        self.context_text.pack(fill="x")
+        self.context_text.insert("1.0", "El contexto usado para generar la respuesta...")
+        self.context_text.configure(state="disabled")
+
+    def _build_analysis_tab(self, parent):
+        """Construye la pestaña de analisis legal."""
+        ctk.CTkLabel(
+            parent,
+            text="Analisis Legal del Contrato",
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(anchor="w", pady=(10, 5))
+        
+        self.analysis_text = ctk.CTkTextbox(parent, wrap="word")
+        self.analysis_text.pack(fill="both", expand=True)
+        self.analysis_text.insert("1.0", "El analisis legal aparecera aqui...")
+        self.analysis_text.configure(state="disabled")
     
     def _build_footer(self, parent):
         """Construye el footer."""

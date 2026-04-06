@@ -1,119 +1,152 @@
 """
-Servicio de embeddings para convertir texto en vectores numericos.
-
-Utiliza Google Generative AI (Gemini) para generar embeddings.
+Servicio de embeddings utilizando Gemini API.
+Convierte texto en vectores numericos para busqueda semantica.
 """
 
 import logging
+import os
 from typing import List, Optional
 import numpy as np
 
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from google import genai
 
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
     """
-    Servicio para generar embeddings de texto.
-
-    Convierte fragmentos de texto en vectores numericos para
-    busqueda semantica y recuperacion en RAG.
+    Servicio para generar embeddings usando Gemini.
+    
+    Convierte fragmentos de texto en vectores numericos
+    para busqueda semantica y recuperacion en RAG.
     """
-
-    def __init__(self, model_name: str = "models/embedding-001"):
+    
+    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-embedding-2-preview"):
         """
         Inicializa el servicio de embeddings.
-
+        
         Args:
-            model_name: Modelo de embeddings de Gemini
+            api_key: API key de Gemini (si no se provee, usa .env)
+            model_name: Modelo de embedding a utilizar
         """
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.model_name = model_name
-        self._model: Optional[GoogleGenerativeAIEmbeddings] = None
+        self._client = None
         self._dimension: Optional[int] = None
-
-        logger.info(f"Inicializando embeddings con Gemini: {model_name}")
-
+        
+        logger.info(f"Servicio de embeddings inicializado con modelo: {model_name}")
+    
     @property
-    def model(self) -> GoogleGenerativeAIEmbeddings:
-        """
-        Lazy loading del modelo.
-        """
-        if self._model is None:
-            logger.info("Cargando modelo de embeddings Gemini...")
-            self._model = GoogleGenerativeAIEmbeddings(
-                model=self.model_name
-            )
-        return self._model
-
+    def client(self):
+        """Obtiene el cliente de Gemini."""
+        if self._client is None:
+            if not self.api_key:
+                raise ValueError("API key no configurada")
+            self._client = genai.Client(api_key=self.api_key)
+        return self._client
+    
     @property
     def dimension(self) -> int:
         """
-        Dimension del embedding.
-
-        NOTA: Gemini no la expone directamente,
-        así que la calculamos dinámicamente.
+        Obtiene la dimension de los embeddings.
+        
+        Returns:
+            Dimension del vector de embedding
         """
         if self._dimension is None:
-            test_embedding = self.embed_text("test")
-            self._dimension = len(test_embedding)
-            logger.info(f"Dimension detectada: {self._dimension}")
-
+            # Probar con un texto corto
+            embedding = self.embed_text("test")
+            self._dimension = len(embedding)
+            logger.info(f"Dimension de embedding detectada: {self._dimension}")
         return self._dimension
-
+    
     def embed_text(self, texto: str) -> np.ndarray:
         """
-        Embedding de un solo texto.
+        Genera embedding para un solo texto.
+        
+        Args:
+            texto: Texto a convertir en embedding
+            
+        Returns:
+            Vector numpy con el embedding
         """
-        if not texto or not texto.strip():
-            logger.warning("Texto vacío para embedding")
+        if not texto or len(texto.strip()) == 0:
+            logger.warning("Texto vacio para embedding")
             return np.zeros(self.dimension)
-
+        
         try:
-            embedding = self.model.embed_query(texto)
-            return np.array(embedding, dtype=np.float32)
-
+            # Limitar texto a 2000 caracteres (limite recomendado)
+            texto_procesado = texto[:2000] if len(texto) > 2000 else texto
+            
+            result = self.client.models.embed_content(
+                model=self.model_name,
+                contents=texto_procesado
+            )
+            
+            embedding = np.array(result.embeddings[0].values, dtype=np.float32)
+            return embedding
+            
         except Exception as e:
             logger.error(f"Error generando embedding: {e}")
             raise
-
+    
     def embed_texts(self, textos: List[str]) -> np.ndarray:
         """
-        Embeddings batch.
+        Genera embeddings para multiples textos.
+        
+        Args:
+            textos: Lista de textos a convertir
+            
+        Returns:
+            Matriz numpy con los embeddings
         """
         if not textos:
-            logger.warning("Lista vacía")
+            logger.warning("Lista de textos vacia")
             return np.array([])
-
-        textos_validos = [t for t in textos if t and t.strip()]
-
+        
+        # Filtrar textos vacios
+        textos_validos = []
+        for t in textos:
+            if t and len(t.strip()) > 0:
+                textos_validos.append(t[:2000] if len(t) > 2000 else t)
+        
         if not textos_validos:
-            logger.warning("No hay textos válidos")
+            logger.warning("No hay textos validos")
             return np.array([])
-
+        
         try:
-            embeddings = self.model.embed_documents(textos_validos)
+            embeddings = []
+            for texto in textos_validos:
+                emb = self.embed_text(texto)
+                embeddings.append(emb)
+            
             return np.array(embeddings, dtype=np.float32)
-
+            
         except Exception as e:
-            logger.error(f"Error en batch embeddings: {e}")
+            logger.error(f"Error generando embeddings batch: {e}")
             raise
-
+    
     def embed_chunks(self, chunks: List[dict]) -> List[dict]:
         """
-        Agrega embeddings a chunks.
+        Genera embeddings para una lista de chunks y los enriquece.
+        
+        Args:
+            chunks: Lista de chunks con campo 'texto'
+            
+        Returns:
+            Lista de chunks enriquecidos con campo 'embedding'
         """
         if not chunks:
             return []
-
+        
         textos = [chunk["texto"] for chunk in chunks]
         embeddings = self.embed_texts(textos)
-
-        resultado = []
+        
+        chunks_con_embedding = []
         for i, chunk in enumerate(chunks):
-            nuevo = chunk.copy()
-            nuevo["embedding"] = embeddings[i]
-            resultado.append(nuevo)
-
-        logger.info(f"Embeddings generados para {len(resultado)} chunks")
-        return resultado
+            nuevo_chunk = chunk.copy()
+            nuevo_chunk["embedding"] = embeddings[i]
+            chunks_con_embedding.append(nuevo_chunk)
+        
+        logger.info(f"Embeddings generados para {len(chunks_con_embedding)} chunks")
+        return chunks_con_embedding
