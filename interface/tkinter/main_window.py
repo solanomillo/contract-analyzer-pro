@@ -1,11 +1,12 @@
 """
 Ventana principal de la aplicacion.
-Maneja la carga de PDF y visualizacion de resultados.
+Maneja la carga de PDF, RAG y preguntas sobre el contrato.
 """
 
 import logging
 import os
 import sys
+import threading
 from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
@@ -14,6 +15,7 @@ from interface.tkinter.components import FileUploadFrame, ProgressCard
 from interface.tkinter.styles import configurar_tema, crear_titulo, crear_card
 from application.services.processing_service import ProcessingService
 from application.services.config_service import ConfigService
+from application.services.rag_service import RAGService
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ class MainWindow:
         """Inicializa la ventana principal."""
         self.root = ctk.CTk()
         self.root.title("Contract Analyzer Pro - Analizador de Contratos")
-        self.root.geometry("1200x800")
+        self.root.geometry("1300x850")
         
         # Configurar tema
         self.colores = configurar_tema()
@@ -33,11 +35,13 @@ class MainWindow:
         # Servicios
         self.processing_service = ProcessingService()
         self.config_service = ConfigService()
+        self.rag_service = RAGService()
         self.current_contract_data = None
         self.current_pdf_path = None
         
         # Estado
         self.is_processing = False
+        self.is_answering = False
         
         # Construir UI
         self._build_ui()
@@ -51,9 +55,9 @@ class MainWindow:
     def _center_window(self):
         """Centra la ventana en la pantalla."""
         self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (1200 // 2)
-        y = (self.root.winfo_screenheight() // 2) - (800 // 2)
-        self.root.geometry(f"1200x800+{x}+{y}")
+        x = (self.root.winfo_screenwidth() // 2) - (1300 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (850 // 2)
+        self.root.geometry(f"1300x850+{x}+{y}")
     
     def _build_ui(self):
         """Construye la interfaz de usuario."""
@@ -149,10 +153,8 @@ class MainWindow:
         self.info_text.insert("1.0", "Esperando carga de documento...")
         self.info_text.configure(state="disabled")
     
-    # En _build_preview_area, agregar seccion de preguntas
-
     def _build_preview_area(self, parent):
-        """Construye el area de preview y preguntas."""
+        """Construye el area de preview con pestañas."""
         
         preview_card = crear_card(parent)
         preview_card.pack(fill="both", expand=True)
@@ -172,7 +174,7 @@ class MainWindow:
         # Pestaña de analisis
         tab_analisis = tabview.add("📊 Analisis Legal")
         self._build_analysis_tab(tab_analisis)
-
+    
     def _build_text_tab(self, parent):
         """Construye la pestaña de texto."""
         self.progress_card = ProgressCard(parent)
@@ -193,7 +195,7 @@ class MainWindow:
             text_color="#888888"
         )
         self.stats_label.pack()
-
+    
     def _build_qa_tab(self, parent):
         """Construye la pestaña de preguntas y respuestas."""
         # Area de pregunta
@@ -224,23 +226,23 @@ class MainWindow:
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(anchor="w", pady=(10, 5))
         
-        self.answer_text = ctk.CTkTextbox(parent, wrap="word")
-        self.answer_text.pack(fill="both", expand=True)
+        self.answer_text = ctk.CTkTextbox(parent, wrap="word", height=150)
+        self.answer_text.pack(fill="x", pady=(0, 10))
         self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
         self.answer_text.configure(state="disabled")
         
         # Contexto usado
         ctk.CTkLabel(
             parent,
-            text="Contexto utilizado:",
+            text="Contexto utilizado (chunks relevantes):",
             font=ctk.CTkFont(size=12, weight="bold")
-        ).pack(anchor="w", pady=(10, 5))
+        ).pack(anchor="w", pady=(5, 5))
         
-        self.context_text = ctk.CTkTextbox(parent, height=100, wrap="word")
+        self.context_text = ctk.CTkTextbox(parent, height=120, wrap="word")
         self.context_text.pack(fill="x")
-        self.context_text.insert("1.0", "El contexto usado para generar la respuesta...")
+        self.context_text.insert("1.0", "El contexto usado para generar la respuesta aparecera aqui...")
         self.context_text.configure(state="disabled")
-
+    
     def _build_analysis_tab(self, parent):
         """Construye la pestaña de analisis legal."""
         ctk.CTkLabel(
@@ -248,6 +250,16 @@ class MainWindow:
             text="Analisis Legal del Contrato",
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(anchor="w", pady=(10, 5))
+        
+        # Boton para generar analisis
+        self.btn_analyze_full = ctk.CTkButton(
+            parent,
+            text="📊 Generar Analisis Completo",
+            command=self._generate_full_analysis,
+            width=200,
+            state="disabled"
+        )
+        self.btn_analyze_full.pack(anchor="w", pady=(0, 15))
         
         self.analysis_text = ctk.CTkTextbox(parent, wrap="word")
         self.analysis_text.pack(fill="both", expand=True)
@@ -265,20 +277,20 @@ class MainWindow:
         buttons_frame = ctk.CTkFrame(footer_frame, fg_color="transparent")
         buttons_frame.pack(fill="x")
         
-        self.btn_analyze = ctk.CTkButton(
+        self.btn_clear = ctk.CTkButton(
             buttons_frame,
-            text="🔍 Analizar Riesgos",
-            command=self._on_analyze,
-            width=180,
+            text="🗑️ Limpiar Contrato",
+            command=self._on_clear,
+            width=150,
             height=40,
-            fg_color="#3498db",
-            state="disabled"
+            fg_color="transparent",
+            border_width=1
         )
-        self.btn_analyze.pack(side="left", padx=(0, 10))
+        self.btn_clear.pack(side="left")
         
         self.btn_export = ctk.CTkButton(
             buttons_frame,
-            text="📎 Exportar Analisis",
+            text="📎 Exportar Texto",
             command=self._on_export,
             width=150,
             height=40,
@@ -286,18 +298,7 @@ class MainWindow:
             border_width=1,
             state="disabled"
         )
-        self.btn_export.pack(side="left")
-        
-        self.btn_clear = ctk.CTkButton(
-            buttons_frame,
-            text="🗑️ Limpiar",
-            command=self._on_clear,
-            width=120,
-            height=40,
-            fg_color="transparent",
-            border_width=1
-        )
-        self.btn_clear.pack(side="left", padx=(10, 0))
+        self.btn_export.pack(side="left", padx=(10, 0))
     
     def _cambiar_api_key(self):
         """Cambia la API key usando ConfigService."""
@@ -333,11 +334,11 @@ class MainWindow:
         self._procesar_pdf()
     
     def _procesar_pdf(self):
-        """Procesa el PDF."""
+        """Procesa el PDF e indexa en RAG."""
         self.is_processing = True
         self.file_upload.set_loading(True)
         self.progress_card.show()
-        self.progress_card.update_progress(0.1, "Iniciando...", "")
+        self.progress_card.update_progress(0.1, "Iniciando procesamiento...", "")
         
         def on_progress(mensaje: str):
             self.root.after(0, lambda: self._update_progress(mensaje))
@@ -356,33 +357,56 @@ class MainWindow:
         )
     
     def _update_progress(self, mensaje: str):
+        """Actualiza el progreso."""
         self.progress_card.update_progress(0.5, mensaje, "")
         self.status_label.configure(text=f"🔄 {mensaje}")
     
     def _on_process_complete(self, resultado: dict):
+        """Maneja la finalizacion del procesamiento."""
         self.current_contract_data = resultado
         self.is_processing = False
         
         self.file_upload.set_success(resultado["nombre_archivo"])
-        self.progress_card.update_progress(1.0, "Completado!", "")
-        self.status_label.configure(text="✅ Documento procesado")
+        self.progress_card.update_progress(1.0, "Indexando en base vectorial...", "")
         
+        # Indexar en RAG
+        try:
+            self.status_label.configure(text="🔄 Indexando en base vectorial...")
+            index_result = self.rag_service.index_contract(resultado)
+            
+            if index_result.get("estado") == "exito":
+                self.progress_card.update_progress(1.0, "Procesamiento completado!", 
+                                                   f"Indexados {index_result['chunks_indexados']} chunks")
+                self.status_label.configure(text="✅ Documento procesado e indexado")
+                
+                # Habilitar botones de preguntas
+                self.btn_ask.configure(state="normal")
+                self.btn_analyze_full.configure(state="normal")
+                self.btn_export.configure(state="normal")
+            else:
+                self.status_label.configure(text="⚠️ Indexacion fallida")
+                
+        except Exception as e:
+            logger.error(f"Error en indexacion: {e}")
+            self.status_label.configure(text="❌ Error en indexacion")
+        
+        # Actualizar UI
         self._update_contract_info(resultado)
         self._update_preview(resultado)
         
-        self.btn_analyze.configure(state="normal")
-        self.btn_export.configure(state="normal")
-        
+        # Ocultar progreso
         self.root.after(2000, self.progress_card.hide)
     
     def _on_process_error(self, error: str):
+        """Maneja error en el procesamiento."""
         self.is_processing = False
         self.file_upload.set_loading(False)
         self.progress_card.hide()
-        self.status_label.configure(text="❌ Error")
-        messagebox.showerror("Error", f"No se pudo procesar:\n{error}")
+        self.status_label.configure(text="❌ Error en procesamiento")
+        messagebox.showerror("Error", f"No se pudo procesar el PDF:\n\n{error}")
     
     def _update_contract_info(self, resultado: dict):
+        """Actualiza la informacion del contrato."""
         self.info_text.configure(state="normal")
         self.info_text.delete("1.0", "end")
         
@@ -395,72 +419,242 @@ Chunks: {resultado['total_chunks']}"""
         self.info_text.configure(state="disabled")
     
     def _update_preview(self, resultado: dict):
+        """Actualiza el preview del texto."""
         self.preview_text.configure(state="normal")
         self.preview_text.delete("1.0", "end")
         
-        texto = resultado['texto_completo'][:2000]
-        if len(resultado['texto_completo']) > 2000:
-            texto += "\n\n... [texto truncado]"
+        texto = resultado['texto_completo'][:3000]
+        if len(resultado['texto_completo']) > 3000:
+            texto += "\n\n... [texto truncado, usar preguntas para buscar informacion especifica]"
         
         self.preview_text.insert("1.0", texto)
         self.preview_text.configure(state="disabled")
         
         self.stats_label.configure(
-            text=f"Total: {resultado['total_caracteres']} caracteres | {resultado['total_chunks']} chunks"
+            text=f"Total: {resultado['total_caracteres']} caracteres | {resultado['total_chunks']} chunks indexados"
         )
     
-    def _on_analyze(self):
+    def _ask_question(self):
+        """Realiza una pregunta sobre el contrato usando RAG."""
         if not self.current_contract_data:
-            messagebox.showwarning("Sin documento", "Carga un contrato primero")
+            messagebox.showwarning("Sin documento", "Primero carga un contrato")
             return
         
-        messagebox.showinfo("Analisis", f"Analizando: {self.current_contract_data['nombre_archivo']}")
+        if self.is_answering:
+            messagebox.showwarning("En proceso", "Espera a que termine la respuesta actual")
+            return
+        
+        pregunta = self.question_entry.get("1.0", "end-1c").strip()
+        
+        if not pregunta or pregunta == "Ejemplo: Cuales son las penalizaciones por incumplimiento?":
+            messagebox.showwarning("Sin pregunta", "Ingresa una pregunta valida")
+            return
+        
+        self.is_answering = True
+        self.btn_ask.configure(state="disabled", text="Procesando...")
+        self.answer_text.configure(state="normal")
+        self.answer_text.delete("1.0", "end")
+        self.answer_text.insert("1.0", "🔍 Buscando informacion en el contrato...")
+        self.answer_text.configure(state="disabled")
+        
+        self.context_text.configure(state="normal")
+        self.context_text.delete("1.0", "end")
+        self.context_text.insert("1.0", "Buscando chunks relevantes...")
+        self.context_text.configure(state="disabled")
+        
+        def task():
+            try:
+                # Buscar chunks relevantes
+                resultados = self.rag_service.search(pregunta, k=4)
+                
+                if not resultados:
+                    respuesta = "No se encontro informacion relevante en el contrato para responder a tu pregunta.\n\nSugerencia: Intenta reformular la pregunta o se mas especifico."
+                    contexto_texto = "No se encontraron chunks relevantes."
+                else:
+                    # Construir contexto
+                    contexto_texto = ""
+                    for i, res in enumerate(resultados, 1):
+                        score = res.get("score", 0)
+                        texto = res.get("texto", "")[:500]
+                        contexto_texto += f"\n[Chunk {i} - Relevancia: {score:.3f}]\n{texto}\n{'-'*50}\n"
+                    
+                    # Generar respuesta simple (por ahora mostramos los chunks)
+                    # En FASE 4 se integrara con Gemini para respuestas mas naturales
+                    respuesta = f"📌 **Informacion encontrada en el contrato:**\n\n"
+                    for i, res in enumerate(resultados, 1):
+                        score = res.get("score", 0)
+                        texto = res.get("texto", "")
+                        respuesta += f"\n**Fragmento {i} (relevancia: {score:.2f}):**\n{texto}\n\n"
+                    
+                    if len(resultados) == 0:
+                        respuesta = "No se encontraron clausulas relevantes para tu pregunta."
+                
+                self.root.after(0, lambda: self._show_answer(respuesta, contexto_texto))
+                
+            except Exception as e:
+                logger.error(f"Error en pregunta: {e}")
+                self.root.after(0, lambda: self._show_answer(f"Error al procesar la pregunta: {e}", ""))
+        
+        threading.Thread(target=task, daemon=True).start()
+    
+    def _show_answer(self, respuesta: str, contexto: str):
+        """Muestra la respuesta en la UI."""
+        self.answer_text.configure(state="normal")
+        self.answer_text.delete("1.0", "end")
+        self.answer_text.insert("1.0", respuesta)
+        self.answer_text.configure(state="disabled")
+        
+        self.context_text.configure(state="normal")
+        self.context_text.delete("1.0", "end")
+        self.context_text.insert("1.0", contexto if contexto else "No se encontraron chunks relevantes")
+        self.context_text.configure(state="disabled")
+        
+        self.btn_ask.configure(state="normal", text="🔍 Preguntar")
+        self.is_answering = False
+    
+    def _generate_full_analysis(self):
+        """Genera un analisis completo del contrato."""
+        if not self.current_contract_data:
+            messagebox.showwarning("Sin documento", "Primero carga un contrato")
+            return
+        
+        self.btn_analyze_full.configure(state="disabled", text="Generando analisis...")
+        self.analysis_text.configure(state="normal")
+        self.analysis_text.delete("1.0", "end")
+        self.analysis_text.insert("1.0", "🔍 Analizando contrato...\n\nEsto puede tomar unos segundos...")
+        self.analysis_text.configure(state="disabled")
+        
+        def task():
+            try:
+                # Buscar diferentes tipos de clausulas
+                queries = [
+                    "penalizacion multa incumplimiento",
+                    "rescision terminacion cancelacion",
+                    "renovacion automatica prorroga",
+                    "exclusividad no competencia",
+                    "responsabilidad limitada indemnizacion",
+                    "confidencialidad secreto"
+                ]
+                
+                analisis = "=" * 60 + "\n"
+                analisis += "ANALISIS LEGAL DEL CONTRATO\n"
+                analisis += "=" * 60 + "\n\n"
+                
+                for query in queries:
+                    resultados = self.rag_service.search(query, k=2)
+                    if resultados:
+                        analisis += f"\n📌 {query.upper()}\n"
+                        analisis += "-" * 40 + "\n"
+                        for res in resultados:
+                            score = res.get("score", 0)
+                            texto = res.get("texto", "")[:300]
+                            analisis += f"[Relevancia: {score:.2f}]\n{texto}\n\n"
+                
+                if len(analisis) < 200:
+                    analisis += "No se encontraron clausulas especificas en el contrato.\n"
+                    analisis += "El contrato puede ser muy corto o no contener clausulas tipicas."
+                
+                self.root.after(0, lambda: self._show_analysis(analisis))
+                
+            except Exception as e:
+                logger.error(f"Error en analisis: {e}")
+                self.root.after(0, lambda: self._show_analysis(f"Error al generar analisis: {e}"))
+        
+        threading.Thread(target=task, daemon=True).start()
+    
+    def _show_analysis(self, analisis: str):
+        """Muestra el analisis en la UI."""
+        self.analysis_text.configure(state="normal")
+        self.analysis_text.delete("1.0", "end")
+        self.analysis_text.insert("1.0", analisis)
+        self.analysis_text.configure(state="disabled")
+        
+        self.btn_analyze_full.configure(state="normal", text="📊 Generar Analisis Completo")
     
     def _on_export(self):
+        """Exporta el texto del contrato."""
         if not self.current_contract_data:
             messagebox.showwarning("Sin documento", "Carga un contrato primero")
             return
         
         archivo = filedialog.asksaveasfilename(
             defaultextension=".txt",
-            filetypes=[("Texto", "*.txt"), ("Todos", "*.*")]
+            filetypes=[("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")]
         )
         
         if archivo:
             try:
                 with open(archivo, 'w', encoding='utf-8') as f:
+                    f.write("=" * 60 + "\n")
+                    f.write("CONTRACT ANALYZER PRO - TEXTO DEL CONTRATO\n")
+                    f.write("=" * 60 + "\n\n")
+                    f.write(f"Archivo: {self.current_contract_data['nombre_archivo']}\n")
+                    f.write(f"Paginas: {self.current_contract_data['total_paginas']}\n")
+                    f.write(f"Caracteres: {self.current_contract_data['total_caracteres']}\n")
+                    f.write(f"Chunks: {self.current_contract_data['total_chunks']}\n\n")
+                    f.write("=" * 60 + "\n")
+                    f.write("TEXTO COMPLETO\n")
+                    f.write("=" * 60 + "\n\n")
                     f.write(self.current_contract_data['texto_completo'])
-                messagebox.showinfo("Exito", f"Guardado en:\n{archivo}")
+                
+                messagebox.showinfo("Exito", f"Texto exportado a:\n{archivo}")
             except Exception as e:
                 messagebox.showerror("Error", str(e))
     
     def _on_clear(self):
+        """Limpia el contrato actual."""
         if self.is_processing:
-            messagebox.showwarning("En proceso", "Espera a que termine")
+            messagebox.showwarning("En proceso", "Espera a que termine el procesamiento")
             return
         
         self.current_contract_data = None
         self.current_pdf_path = None
         
+        # Limpiar RAG
+        self.rag_service.clear()
+        
+        # Limpiar UI
         self.info_text.configure(state="normal")
         self.info_text.delete("1.0", "end")
-        self.info_text.insert("1.0", "Esperando carga...")
+        self.info_text.insert("1.0", "Esperando carga de documento...")
         self.info_text.configure(state="disabled")
         
         self.preview_text.configure(state="normal")
         self.preview_text.delete("1.0", "end")
-        self.preview_text.insert("1.0", "El texto aparecera aqui...")
+        self.preview_text.insert("1.0", "El texto del contrato aparecera aqui...")
         self.preview_text.configure(state="disabled")
+        
+        self.answer_text.configure(state="normal")
+        self.answer_text.delete("1.0", "end")
+        self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
+        self.answer_text.configure(state="disabled")
+        
+        self.context_text.configure(state="normal")
+        self.context_text.delete("1.0", "end")
+        self.context_text.insert("1.0", "El contexto usado para generar la respuesta aparecera aqui...")
+        self.context_text.configure(state="disabled")
+        
+        self.analysis_text.configure(state="normal")
+        self.analysis_text.delete("1.0", "end")
+        self.analysis_text.insert("1.0", "El analisis legal aparecera aqui...")
+        self.analysis_text.configure(state="disabled")
         
         self.stats_label.configure(text="")
         self.status_label.configure(text="✅ Sistema listo")
-        self.btn_analyze.configure(state="disabled")
+        
+        self.btn_ask.configure(state="disabled")
+        self.btn_analyze_full.configure(state="disabled")
         self.btn_export.configure(state="disabled")
+        
         self.file_upload._reset_state()
+        
+        messagebox.showinfo("Limpieza", "Contrato eliminado correctamente")
     
     def _on_closing(self):
-        if self.is_processing:
-            if messagebox.askyesno("Salir", "Procesamiento en curso. ¿Salir?"):
+        """Maneja el cierre de la ventana."""
+        if self.is_processing or self.is_answering:
+            respuesta = messagebox.askyesno("Salir", "Hay un proceso en curso. ¿Seguro que quieres salir?")
+            if respuesta:
                 self.root.destroy()
         else:
             self.root.destroy()
