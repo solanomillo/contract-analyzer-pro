@@ -4,7 +4,7 @@ Construye un grafo de ejecucion con nodos y conexiones condicionales.
 """
 
 import logging
-from typing import TypedDict, List, Dict, Any, Optional, Literal
+from typing import TypedDict, List, Dict, Any, Optional, Literal, Union
 from dataclasses import dataclass
 
 from langgraph.graph import StateGraph, START, END
@@ -20,9 +20,6 @@ logger = logging.getLogger(__name__)
 class EstadoAnalisis(TypedDict):
     """
     Estado que fluye a traves del grafo.
-    
-    Este estado es compartido entre todos los nodos y se va
-    enriqueciendo a medida que avanza la ejecucion.
     """
     # Entrada
     texto: str
@@ -46,9 +43,6 @@ class EstadoAnalisis(TypedDict):
 class AnalisisWorkflow:
     """
     Workflow para analisis de contratos usando LangGraph.
-    
-    Construye un grafo donde:
-    START -> Router -> (Agentes) -> Union -> Final -> END
     """
     
     def __init__(self, api_key: Optional[str] = None):
@@ -74,52 +68,25 @@ class AnalisisWorkflow:
         """
         Construye el grafo de ejecucion.
         
-        Estructura del grafo:
-        
-        START
-          │
-          ▼
-        ROUTER (decide que camino tomar)
-          │
-          ├──────────┬──────────┐
-          │          │          │
-          ▼          ▼          ▼
-        RIESGO    FECHAS    OBLIGACIONES
-          │          │          │
-          └──────────┼──────────┘
-                     │
-                     ▼
-                   UNION
-                     │
-                     ▼
-                   FINAL
-                     │
-                     ▼
-                    END
+        Estructura:
+        START → router → (riesgo/fechas/obligaciones) → union → final → END
         """
-        # Crear el grafo con el estado definido
+        # Crear el grafo
         workflow = StateGraph(EstadoAnalisis)
         
         # ============ NODOS ============
-        # Nodo router - decide que camino tomar
         workflow.add_node("router", self._router_node)
-        
-        # Nodos de agentes
         workflow.add_node("riesgo", self._risk_node)
         workflow.add_node("fechas", self._date_node)
         workflow.add_node("obligaciones", self._obligation_node)
-        
-        # Nodo union - combina resultados de agentes paralelos
         workflow.add_node("union", self._union_node)
-        
-        # Nodo final - genera resumen
         workflow.add_node("final", self._final_node)
         
         # ============ EDGES ============
-        # START -> Router (punto de entrada obligatorio)
+        # START -> Router
         workflow.add_edge(START, "router")
         
-        # Router decide a que nodos ir (condicional)
+        # Router -> decide que camino tomar (condicional)
         workflow.add_conditional_edges(
             "router",
             self._router_decision,
@@ -127,35 +94,26 @@ class AnalisisWorkflow:
                 "riesgo": "riesgo",
                 "fechas": "fechas",
                 "obligaciones": "obligaciones",
-                "todos": ["riesgo", "fechas", "obligaciones"],
-                "final": "final"
+                "union": "union"  # Si no hay agentes especificos, ir directo a union
             }
         )
         
-        # Todos los nodos de agentes van a union
+        # Agentes -> Union (todos van a union)
         workflow.add_edge("riesgo", "union")
         workflow.add_edge("fechas", "union")
         workflow.add_edge("obligaciones", "union")
         
-        # Union va a final
+        # Union -> Final
         workflow.add_edge("union", "final")
         
-        # Final termina en END
+        # Final -> END
         workflow.add_edge("final", END)
         
-        # Compilar el grafo
+        # Compilar
         return workflow.compile()
     
     def _router_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """
-        Nodo router: analiza la consulta y prepara el estado.
-        
-        Args:
-            estado: Estado actual
-            
-        Returns:
-            Estado actualizado
-        """
+        """Nodo router: analiza la consulta y prepara el estado."""
         logger.info("Router: analizando consulta...")
         
         consulta = estado.get("consulta", "")
@@ -171,19 +129,16 @@ class AnalisisWorkflow:
     
     def _router_decision(self, estado: EstadoAnalisis) -> str:
         """
-        Decide que nodos ejecutar basado en la consulta.
-        
-        Args:
-            estado: Estado actual
-            
-        Returns:
-            Nombre del/los nodos a ejecutar
+        Decide que nodo ejecutar basado en la consulta.
+        Retorna el nombre del nodo, NO una lista.
         """
         consulta = estado.get("consulta", "").lower()
         
-        # Si no hay consulta o es analisis completo, ejecutar todos
+        # Si no hay consulta o es analisis completo
         if not consulta or consulta in ["todos", "analizar", "analisis completo", "completo"]:
-            return "todos"
+            # Para analisis completo, ejecutamos los agentes en paralelo
+            # En LangGraph, ejecutamos un nodo que luego llama a los otros
+            return "riesgo"  # Comenzamos con riesgo, luego los otros se encadenan
         
         # Palabras clave para cada tipo
         palabras_riesgo = ["penalizacion", "multa", "riesgo", "clausula", "rescicion", 
@@ -204,19 +159,11 @@ class AnalisisWorkflow:
         if any(p in consulta for p in palabras_obligaciones):
             return "obligaciones"
         
-        # Por defecto, ejecutar todos
-        return "todos"
+        # Por defecto, ir a union (sin agentes)
+        return "union"
     
     def _risk_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """
-        Nodo de deteccion de riesgos.
-        
-        Args:
-            estado: Estado actual
-            
-        Returns:
-            Estado actualizado con hallazgos de riesgo
-        """
+        """Nodo de deteccion de riesgos."""
         logger.info("Nodo Riesgo: analizando clausulas peligrosas...")
         
         try:
@@ -228,18 +175,16 @@ class AnalisisWorkflow:
             logger.error(f"Error en nodo riesgo: {e}")
             estado["errores"].append(f"Riesgo: {str(e)}")
         
+        # Si es analisis completo, encadenar al siguiente agente
+        consulta = estado.get("consulta", "").lower()
+        if not consulta or consulta in ["todos", "analizar", "analisis completo", "completo"]:
+            # Ejecutamos fechas como siguiente paso
+            estado = self._date_node(estado)
+        
         return estado
     
     def _date_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """
-        Nodo de extraccion de fechas.
-        
-        Args:
-            estado: Estado actual
-            
-        Returns:
-            Estado actualizado con hallazgos de fechas
-        """
+        """Nodo de extraccion de fechas."""
         logger.info("Nodo Fechas: extrayendo fechas criticas...")
         
         try:
@@ -251,18 +196,15 @@ class AnalisisWorkflow:
             logger.error(f"Error en nodo fechas: {e}")
             estado["errores"].append(f"Fechas: {str(e)}")
         
+        # Si es analisis completo, encadenar al siguiente agente
+        consulta = estado.get("consulta", "").lower()
+        if not consulta or consulta in ["todos", "analizar", "analisis completo", "completo"]:
+            estado = self._obligation_node(estado)
+        
         return estado
     
     def _obligation_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """
-        Nodo de deteccion de obligaciones.
-        
-        Args:
-            estado: Estado actual
-            
-        Returns:
-            Estado actualizado con hallazgos de obligaciones
-        """
+        """Nodo de deteccion de obligaciones."""
         logger.info("Nodo Obligaciones: detectando obligaciones...")
         
         try:
@@ -277,15 +219,7 @@ class AnalisisWorkflow:
         return estado
     
     def _union_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """
-        Nodo union: combina los resultados de todos los agentes.
-        
-        Args:
-            estado: Estado actual
-            
-        Returns:
-            Estado actualizado con resultados combinados
-        """
+        """Nodo union: combina los resultados de todos los agentes."""
         logger.info("Union: combinando resultados...")
         
         total = (len(estado.get("hallazgos_riesgo", [])) +
@@ -298,15 +232,7 @@ class AnalisisWorkflow:
         return estado
     
     def _final_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """
-        Nodo final: genera el resumen del analisis.
-        
-        Args:
-            estado: Estado actual
-            
-        Returns:
-            Estado actualizado con resumen
-        """
+        """Nodo final: genera el resumen del analisis."""
         logger.info("Final: generando resumen...")
         
         riesgos = estado.get("hallazgos_riesgo", [])
@@ -327,7 +253,7 @@ class AnalisisWorkflow:
             else:
                 bajos.append(h)
         
-        # Generar resumen formateado
+        # Generar resumen
         resumen = []
         resumen.append("=" * 60)
         resumen.append("RESUMEN DEL ANALISIS LEGAL")
@@ -363,14 +289,14 @@ class AnalisisWorkflow:
     
     async def ejecutar(self, texto: str, consulta: Optional[str] = None) -> Dict[str, Any]:
         """
-        Ejecuta el workflow con el texto y consulta dados.
+        Ejecuta el workflow.
         
         Args:
             texto: Texto del contrato
-            consulta: Consulta del usuario (opcional)
+            consulta: Consulta del usuario
             
         Returns:
-            Diccionario con los resultados del analisis
+            Diccionario con resultados
         """
         logger.info(f"Ejecutando workflow con consulta: {consulta or 'completa'}")
         
@@ -388,7 +314,6 @@ class AnalisisWorkflow:
             "resumen": ""
         }
         
-        # Ejecutar el grafo
         try:
             resultado = await self.graph.ainvoke(estado_inicial)
             
@@ -409,16 +334,7 @@ class AnalisisWorkflow:
             }
     
     def ejecutar_sync(self, texto: str, consulta: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Version sincrona de ejecutar.
-        
-        Args:
-            texto: Texto del contrato
-            consulta: Consulta del usuario
-            
-        Returns:
-            Diccionario con los resultados
-        """
+        """Version sincrona de ejecutar."""
         import asyncio
         
         try:
