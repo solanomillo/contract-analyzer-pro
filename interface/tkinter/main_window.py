@@ -29,10 +29,21 @@ class MainWindow:
         self.root = ctk.CTk()
         self.root.title("Contract Analyzer Pro - Analizador de Contratos")
         
-        # Hacer la ventana movible y redimensionable correctamente
-        self.root.geometry("1400x900")
-        self.root.minsize(1200, 700)  # Tamaño mínimo para que no se corte
-        self.root.resizable(True, True)  # Permitir redimensionar
+        # Configurar ventana - Tamaño inicial adecuado
+        ancho_pantalla = self.root.winfo_screenwidth()
+        alto_pantalla = self.root.winfo_screenheight()
+        
+        # Tamaño inicial: 70% de la pantalla (ni muy grande ni muy chico)
+        ancho_inicial = int(ancho_pantalla * 0.7)
+        alto_inicial = int(alto_pantalla * 0.7)
+        
+        # Posicionar en el centro
+        x = (ancho_pantalla - ancho_inicial) // 2
+        y = (alto_pantalla - alto_inicial) // 2
+        
+        self.root.geometry(f"{ancho_inicial}x{alto_inicial}+{x}+{y}")
+        self.root.minsize(1000, 700)  # Tamaño mínimo para no perder botones
+        self.root.maxsize(ancho_pantalla, alto_pantalla)  # Máximo = pantalla completa
         
         # Configurar tema
         self.colores = configurar_tema()
@@ -42,12 +53,9 @@ class MainWindow:
         self.config_service = ConfigService()
         self.rag_service = RAGService()
         
-        # Inicializar workflow con manejo de errores
-        try:
-            self.workflow = AnalisisWorkflow(api_key=self.config_service.get_api_key())
-        except Exception as e:
-            logger.error(f"Error inicializando workflow: {e}")
-            self.workflow = None
+        # Inicializar workflow sin bloquear (en segundo plano)
+        self.workflow = None
+        self._inicializar_workflow_async()
         
         self.current_contract_data = None
         self.current_pdf_path = None
@@ -60,29 +68,36 @@ class MainWindow:
         # Construir UI
         self._build_ui()
         
-        # Centrar ventana
-        self._center_window()
-        
         # Configurar cierre
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
     
-    def _center_window(self):
-        """Centra la ventana en la pantalla."""
-        self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (1400 // 2)
-        y = (self.root.winfo_screenheight() // 2) - (900 // 2)
-        self.root.geometry(f"1400x900+{x}+{y}")
+    def _inicializar_workflow_async(self):
+        """Inicializa el workflow en segundo plano para no bloquear la UI."""
+        def init_workflow():
+            try:
+                api_key = self.config_service.get_api_key()
+                if api_key:
+                    self.workflow = AnalisisWorkflow(api_key=api_key)
+                    logger.info("Workflow inicializado correctamente")
+                else:
+                    logger.warning("No hay API key para inicializar workflow")
+            except Exception as e:
+                logger.error(f"Error inicializando workflow: {e}")
+                self.workflow = None
+        
+        threading.Thread(target=init_workflow, daemon=True).start()
     
     def _build_ui(self):
         """Construye la interfaz de usuario."""
         
-        # Frame principal - usar grid para mejor comportamiento al redimensionar
-        self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_columnconfigure(0, weight=1)
-        
+        # Frame principal usando grid para mejor comportamiento
         main_frame = ctk.CTkFrame(self.root, fg_color="transparent")
-        main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
-        main_frame.grid_rowconfigure(2, weight=1)  # Fila del contenido expandible
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Configurar grid del frame principal
+        main_frame.grid_rowconfigure(0, weight=0)  # Header
+        main_frame.grid_rowconfigure(1, weight=1)  # Contenido (expande)
+        main_frame.grid_rowconfigure(2, weight=0)  # Footer
         main_frame.grid_columnconfigure(0, weight=1)
         
         # Header
@@ -146,6 +161,7 @@ class MainWindow:
     
     def _build_upload_area(self, parent):
         """Construye el area de carga."""
+        # Card de carga - altura fija pero responsive
         upload_card = crear_card(parent)
         upload_card.grid(row=0, column=0, sticky="ew", pady=(0, 20))
         
@@ -158,16 +174,16 @@ class MainWindow:
         self.file_upload = FileUploadFrame(
             upload_card,
             on_file_selected=self._on_file_selected,
-            height=250,
+            height=200,
             corner_radius=10,
             border_width=1,
             border_color="#3d3d3d"
         )
         self.file_upload.pack(fill="x", padx=20, pady=(0, 20))
         
-        # Info contrato
+        # Info contrato - expandible
         info_card = crear_card(parent)
-        info_card.grid(row=1, column=0, sticky="nsew")
+        info_card.grid(row=1, column=0, sticky="nsew", pady=(0, 0))
         
         ctk.CTkLabel(
             info_card,
@@ -565,7 +581,7 @@ class MainWindow:
                 "Sugerencias para resolver:\n"
                 "1. Espera unos minutos y vuelve a intentar\n"
                 "2. Cambia a otro modelo en la configuración\n"
-                "   - Usa GEMINI_MODEL=gemini-2.0-flash en el archivo .env\n"
+                "   - Edita el archivo .env y cambia GEMINI_MODEL=gemini-2.0-flash\n"
                 "3. Reinicia la aplicación\n\n"
                 f"Error técnico: {error}"
             )
@@ -659,10 +675,11 @@ Chunks: {resultado['total_chunks']}"""
             try:
                 if self.workflow is None:
                     self.root.after(0, lambda: self._show_answer(
-                        "Error: El sistema de analisis no esta disponible.\n\n"
+                        "⚠️ El sistema de analisis no esta disponible.\n\n"
                         "Posibles causas:\n"
-                        "- API key invalida\n"
-                        "- Problema de conexion con Gemini",
+                        "- API key no configurada o invalida\n"
+                        "- Problema de conexion con Gemini\n\n"
+                        "Solucion: Haz clic en 'Cambiar API Key' para configurar una nueva.",
                         ""
                     ))
                     return
@@ -747,7 +764,8 @@ Chunks: {resultado['total_chunks']}"""
             try:
                 if self.workflow is None:
                     self.root.after(0, lambda: self._show_analysis_error(
-                        "El sistema de analisis no esta disponible. Verifica tu API key."
+                        "El sistema de analisis no esta disponible.\n\n"
+                        "Verifica que tu API key sea valida y tenga cuota disponible."
                     ))
                     return
                 
