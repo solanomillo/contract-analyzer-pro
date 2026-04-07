@@ -17,9 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 class EstadoAnalisis(TypedDict):
-    """
-    Estado que fluye a traves del grafo.
-    """
     texto: str
     consulta: Optional[str]
     hallazgos_riesgo: List[Dict[str, Any]]
@@ -38,20 +35,12 @@ class AnalisisWorkflow:
     """
     
     def __init__(self, api_key: Optional[str] = None):
-        """
-        Inicializa el workflow y construye el grafo.
-        
-        Args:
-            api_key: API key de Gemini
-        """
         self.api_key = api_key
         
-        # Inicializar agentes
         self.risk_agent = RiskDetectionAgent(api_key=api_key)
         self.date_agent = DateExtractionAgent(api_key=api_key)
         self.obligation_agent = ObligationAgent(api_key=api_key)
         
-        # Construir el grafo
         self.graph = self._build_graph()
         
         logger.info("Workflow de analisis con LangGraph inicializado")
@@ -60,13 +49,14 @@ class AnalisisWorkflow:
         """
         Construye el grafo de ejecucion.
         
-        Estructura:
-        START → router → (riesgo, fechas, obligaciones) [paralelo] → union → final → END
+        Para evitar el error "unhashable type: list", NO usamos listas en conditional edges.
+        En su lugar, usamos un nodo "dispatcher" que ejecuta los agentes en secuencia.
         """
         workflow = StateGraph(EstadoAnalisis)
         
         # Nodos
         workflow.add_node("router", self._router_node)
+        workflow.add_node("dispatcher", self._dispatcher_node)  # Nodo que orquesta los agentes
         workflow.add_node("riesgo", self._risk_node)
         workflow.add_node("fechas", self._date_node)
         workflow.add_node("obligaciones", self._obligation_node)
@@ -76,7 +66,7 @@ class AnalisisWorkflow:
         # START -> Router
         workflow.add_edge(START, "router")
         
-        # Router decide a que nodos ir (pueden ser multiples)
+        # Router -> Dispatcher (si es "todos") o directamente al agente
         workflow.add_conditional_edges(
             "router",
             self._router_decision,
@@ -84,12 +74,17 @@ class AnalisisWorkflow:
                 "riesgo": "riesgo",
                 "fechas": "fechas",
                 "obligaciones": "obligaciones",
-                "todos": ["riesgo", "fechas", "obligaciones"],  # Paralelo
-                "union": "union"
+                "todos": "dispatcher"  # Dispatcher se encarga de ejecutar todos
             }
         )
         
-        # Todos los agentes van a union
+        # Dispatcher ejecuta todos los agentes secuencialmente
+        workflow.add_edge("dispatcher", "riesgo")
+        workflow.add_edge("riesgo", "fechas")
+        workflow.add_edge("fechas", "obligaciones")
+        workflow.add_edge("obligaciones", "union")
+        
+        # Agentes individuales también van a union
         workflow.add_edge("riesgo", "union")
         workflow.add_edge("fechas", "union")
         workflow.add_edge("obligaciones", "union")
@@ -101,7 +96,6 @@ class AnalisisWorkflow:
         return workflow.compile()
     
     def _router_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """Nodo router: analiza la consulta y prepara el estado."""
         logger.info(f"Router analizando consulta: {estado.get('consulta', 'ninguna')}")
         
         estado["nodo_actual"] = "router"
@@ -112,15 +106,18 @@ class AnalisisWorkflow:
         
         return estado
     
+    def _dispatcher_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
+        """Nodo dispatcher: prepara para ejecutar todos los agentes."""
+        logger.info("Dispatcher: preparando ejecucion de todos los agentes")
+        estado["nodo_actual"] = "dispatcher"
+        return estado
+    
     def _router_decision(self, estado: EstadoAnalisis) -> str:
-        """
-        Decide que nodos ejecutar basado en la consulta.
-        """
         consulta = estado.get("consulta", "").lower()
         
         # Analisis completo
         if not consulta or consulta in ["todos", "analizar", "analisis completo", "completo", "analizar contrato"]:
-            logger.info("Router: ejecutando todos los agentes en paralelo")
+            logger.info("Router: ejecutando todos los agentes")
             return "todos"
         
         # Palabras clave para riesgos
@@ -147,12 +144,10 @@ class AnalisisWorkflow:
             logger.info("Router: seleccionado agente de obligaciones")
             return "obligaciones"
         
-        # Por defecto, ejecutar todos
         logger.info("Router: consulta general, ejecutando todos los agentes")
         return "todos"
     
     def _risk_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """Nodo de deteccion de riesgos."""
         logger.info("Nodo Riesgo: analizando clausulas peligrosas...")
         
         try:
@@ -161,7 +156,6 @@ class AnalisisWorkflow:
             estado["hallazgos_riesgo"] = [h.to_dict() for h in hallazgos]
             logger.info(f"Riesgos encontrados: {len(hallazgos)}")
             
-            # Log detallado de hallazgos
             for h in hallazgos:
                 logger.info(f"  - {h.tipo}: {h.descripcion[:50]}... (riesgo: {h.riesgo})")
                 
@@ -172,7 +166,6 @@ class AnalisisWorkflow:
         return estado
     
     def _date_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """Nodo de extraccion de fechas."""
         logger.info("Nodo Fechas: extrayendo fechas criticas...")
         
         try:
@@ -191,7 +184,6 @@ class AnalisisWorkflow:
         return estado
     
     def _obligation_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """Nodo de deteccion de obligaciones."""
         logger.info("Nodo Obligaciones: detectando obligaciones...")
         
         try:
@@ -210,7 +202,6 @@ class AnalisisWorkflow:
         return estado
     
     def _union_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """Nodo union: combina los resultados de todos los agentes."""
         total = (len(estado.get("hallazgos_riesgo", [])) +
                 len(estado.get("hallazgos_fechas", [])) +
                 len(estado.get("hallazgos_obligaciones", [])))
@@ -221,14 +212,12 @@ class AnalisisWorkflow:
         return estado
     
     def _final_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """Nodo final: genera el resumen del analisis."""
         logger.info("Final: generando resumen...")
         
         riesgos = estado.get("hallazgos_riesgo", [])
         fechas = estado.get("hallazgos_fechas", [])
         obligaciones = estado.get("hallazgos_obligaciones", [])
         
-        # Clasificar por nivel de riesgo
         altos = []
         medios = []
         bajos = []
@@ -242,7 +231,6 @@ class AnalisisWorkflow:
             else:
                 bajos.append(h)
         
-        # Generar resumen
         resumen = []
         resumen.append("=" * 60)
         resumen.append("RESUMEN DEL ANALISIS LEGAL")
@@ -279,16 +267,6 @@ class AnalisisWorkflow:
         return estado
     
     async def ejecutar(self, texto: str, consulta: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Ejecuta el workflow.
-        
-        Args:
-            texto: Texto del contrato
-            consulta: Consulta del usuario
-            
-        Returns:
-            Diccionario con resultados
-        """
         logger.info(f"Ejecutando workflow con consulta: {consulta or 'completa'}")
         logger.info(f"Longitud del texto: {len(texto)} caracteres")
         
@@ -325,7 +303,6 @@ class AnalisisWorkflow:
             }
     
     def ejecutar_sync(self, texto: str, consulta: Optional[str] = None) -> Dict[str, Any]:
-        """Version sincrona de ejecutar."""
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
