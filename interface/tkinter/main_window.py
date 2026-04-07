@@ -889,16 +889,16 @@ Chunks: {resultado['total_chunks']}"""
         self.stats_label.configure(text="")
         self.status_label.configure(text="✅ Sistema listo")
         
-        # DESHABILITAR BOTONES (no habilitar, porque no hay contrato cargado)
+        # DESHABILITAR BOTONES
         self.btn_ask.configure(state="disabled")
         self.btn_analyze.configure(state="disabled")
         self.btn_export.configure(state="disabled")
         
-        # RESTAURAR COMPONENTE DE CARGA - Este es el paso clave
-        # Resetear el FileUploadFrame a su estado original
-        self.file_upload._reset_state()  # Esto restaura el texto y habilita el boton
-        self.file_upload.set_loading(False)  # Asegurar que no esta en modo loading
-        self.file_upload.btn_select.configure(state="normal")  # Forzar habilitar boton
+        # RESTAURAR COMPONENTE DE CARGA - CORREGIDO
+        # Usar el metodo publico reset_state() en lugar de _reset_state()
+        self.file_upload.reset_state()  # <--- CAMBIADO: sin underscore
+        self.file_upload.set_loading(False)
+        # No es necesario forzar btn_select porque reset_state() ya lo hace
         
         # Ocultar barra de progreso si estaba visible
         self.progress_card.hide()
