@@ -826,7 +826,7 @@ Chunks: {resultado['total_chunks']}"""
                 messagebox.showerror("Error", str(e))
     
     def _on_clear(self):
-        """Limpia el contrato actual."""
+        """Limpia el contrato actual y restaura todos los componentes."""
         if self.is_processing or self.is_analyzing or self.is_answering:
             messagebox.showwarning("En proceso", "Espera a que termine el proceso actual")
             return
@@ -837,17 +837,19 @@ Chunks: {resultado['total_chunks']}"""
         # Limpiar RAG
         self.rag_service.clear()
         
-        # Limpiar UI
+        # Limpiar UI - Informacion del contrato
         self.info_text.configure(state="normal")
         self.info_text.delete("1.0", "end")
         self.info_text.insert("1.0", "Esperando carga de documento...")
         self.info_text.configure(state="disabled")
         
+        # Limpiar UI - Preview de texto
         self.preview_text.configure(state="normal")
         self.preview_text.delete("1.0", "end")
         self.preview_text.insert("1.0", "El texto del contrato aparecera aqui...")
         self.preview_text.configure(state="disabled")
         
+        # Limpiar UI - Preguntas y respuestas
         self.answer_text.configure(state="normal")
         self.answer_text.delete("1.0", "end")
         self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
@@ -858,6 +860,7 @@ Chunks: {resultado['total_chunks']}"""
         self.context_text.insert("1.0", "El contexto usado para generar la respuesta aparecera aqui...")
         self.context_text.configure(state="disabled")
         
+        # Limpiar UI - Resultados del analisis
         self.summary_text.configure(state="normal")
         self.summary_text.delete("1.0", "end")
         self.summary_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
@@ -878,16 +881,33 @@ Chunks: {resultado['total_chunks']}"""
         self.low_risks_text.insert("1.0", "No se han detectado riesgos bajos...")
         self.low_risks_text.configure(state="disabled")
         
+        # Limpiar pregunta
+        self.question_entry.delete("1.0", "end")
+        self.question_entry.insert("1.0", "Ejemplo: Cuales son las penalizaciones por incumplimiento?")
+        
+        # Limpiar estadisticas y estado
         self.stats_label.configure(text="")
         self.status_label.configure(text="✅ Sistema listo")
         
+        # DESHABILITAR BOTONES (no habilitar, porque no hay contrato cargado)
         self.btn_ask.configure(state="disabled")
         self.btn_analyze.configure(state="disabled")
         self.btn_export.configure(state="disabled")
         
-        self.file_upload._reset_state()
+        # RESTAURAR COMPONENTE DE CARGA - Este es el paso clave
+        # Resetear el FileUploadFrame a su estado original
+        self.file_upload._reset_state()  # Esto restaura el texto y habilita el boton
+        self.file_upload.set_loading(False)  # Asegurar que no esta en modo loading
+        self.file_upload.btn_select.configure(state="normal")  # Forzar habilitar boton
         
-        messagebox.showinfo("Limpieza", "Contrato eliminado correctamente")
+        # Ocultar barra de progreso si estaba visible
+        self.progress_card.hide()
+        self.analysis_progress.pack_forget()
+        
+        # Resetear progreso
+        self.progress_card.reset()
+        
+        messagebox.showinfo("Limpieza", "Contrato eliminado correctamente.\n\nPuedes cargar un nuevo contrato.")
     
     def _on_closing(self):
         """Maneja el cierre de la ventana."""
