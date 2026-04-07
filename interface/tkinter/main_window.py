@@ -1,6 +1,6 @@
 """
 Ventana principal de la aplicacion.
-Maneja la carga de PDF, RAG y preguntas sobre el contrato.
+Maneja la carga de PDF, RAG, agentes y analisis de riesgos.
 """
 
 import logging
@@ -16,6 +16,7 @@ from interface.tkinter.styles import configurar_tema, crear_titulo, crear_card
 from application.services.processing_service import ProcessingService
 from application.services.config_service import ConfigService
 from application.services.rag_service import RAGService
+from application.graph.workflow import AnalisisWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class MainWindow:
         """Inicializa la ventana principal."""
         self.root = ctk.CTk()
         self.root.title("Contract Analyzer Pro - Analizador de Contratos")
-        self.root.geometry("1300x850")
+        self.root.geometry("1400x900")
         
         # Configurar tema
         self.colores = configurar_tema()
@@ -36,12 +37,15 @@ class MainWindow:
         self.processing_service = ProcessingService()
         self.config_service = ConfigService()
         self.rag_service = RAGService()
+        self.workflow = AnalisisWorkflow(api_key=self.config_service.get_api_key())
+        
         self.current_contract_data = None
         self.current_pdf_path = None
         
         # Estado
         self.is_processing = False
         self.is_answering = False
+        self.is_analyzing = False
         
         # Construir UI
         self._build_ui()
@@ -55,9 +59,9 @@ class MainWindow:
     def _center_window(self):
         """Centra la ventana en la pantalla."""
         self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (1300 // 2)
-        y = (self.root.winfo_screenheight() // 2) - (850 // 2)
-        self.root.geometry(f"1300x850+{x}+{y}")
+        x = (self.root.winfo_screenwidth() // 2) - (1400 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (900 // 2)
+        self.root.geometry(f"1400x900+{x}+{y}")
     
     def _build_ui(self):
         """Construye la interfaz de usuario."""
@@ -174,6 +178,10 @@ class MainWindow:
         # Pestaña de analisis
         tab_analisis = tabview.add("📊 Analisis Legal")
         self._build_analysis_tab(tab_analisis)
+        
+        # Pestaña de resultados
+        tab_resultados = tabview.add("📋 Resultados")
+        self._build_results_tab(tab_resultados)
     
     def _build_text_tab(self, parent):
         """Construye la pestaña de texto."""
@@ -251,20 +259,144 @@ class MainWindow:
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(anchor="w", pady=(10, 5))
         
-        # Boton para generar analisis
-        self.btn_analyze_full = ctk.CTkButton(
+        ctk.CTkLabel(
             parent,
-            text="📊 Generar Analisis Completo",
-            command=self._generate_full_analysis,
+            text="Selecciona el tipo de analisis:",
+            font=ctk.CTkFont(size=12)
+        ).pack(anchor="w", pady=(5, 5))
+        
+        # Frame para opciones de analisis
+        options_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        options_frame.pack(fill="x", pady=(0, 10))
+        
+        self.analysis_type_var = ctk.StringVar(value="completo")
+        
+        self.radio_completo = ctk.CTkRadioButton(
+            options_frame,
+            text="Analisis Completo (todos los agentes)",
+            variable=self.analysis_type_var,
+            value="completo"
+        )
+        self.radio_completo.pack(anchor="w", pady=2)
+        
+        self.radio_riesgo = ctk.CTkRadioButton(
+            options_frame,
+            text="Solo Riesgos (clausulas peligrosas)",
+            variable=self.analysis_type_var,
+            value="riesgo"
+        )
+        self.radio_riesgo.pack(anchor="w", pady=2)
+        
+        self.radio_fechas = ctk.CTkRadioButton(
+            options_frame,
+            text="Solo Fechas (vencimientos, plazos)",
+            variable=self.analysis_type_var,
+            value="fechas"
+        )
+        self.radio_fechas.pack(anchor="w", pady=2)
+        
+        self.radio_obligaciones = ctk.CTkRadioButton(
+            options_frame,
+            text="Solo Obligaciones (pagos, condiciones)",
+            variable=self.analysis_type_var,
+            value="obligaciones"
+        )
+        self.radio_obligaciones.pack(anchor="w", pady=2)
+        
+        # Boton para generar analisis
+        self.btn_analyze = ctk.CTkButton(
+            parent,
+            text="🚀 Iniciar Analisis",
+            command=self._start_analysis,
             width=200,
+            height=40,
+            fg_color="#3498db",
             state="disabled"
         )
-        self.btn_analyze_full.pack(anchor="w", pady=(0, 15))
+        self.btn_analyze.pack(anchor="w", pady=(10, 15))
         
-        self.analysis_text = ctk.CTkTextbox(parent, wrap="word")
-        self.analysis_text.pack(fill="both", expand=True)
-        self.analysis_text.insert("1.0", "El analisis legal aparecera aqui...")
-        self.analysis_text.configure(state="disabled")
+        # Barra de progreso del analisis
+        self.analysis_progress = ctk.CTkProgressBar(parent, width=400)
+        self.analysis_progress.pack(fill="x", pady=(0, 10))
+        self.analysis_progress.set(0)
+        self.analysis_progress.pack_forget()  # Ocultar inicialmente
+    
+    def _build_results_tab(self, parent):
+        """Construye la pestaña de resultados del analisis."""
+        # Contenedor con scroll para resultados
+        results_frame = ctk.CTkScrollableFrame(parent)
+        results_frame.pack(fill="both", expand=True)
+        
+        # Titulo de resultados
+        self.results_title = ctk.CTkLabel(
+            results_frame,
+            text="Resultados del Analisis",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        self.results_title.pack(anchor="w", pady=(10, 10))
+        
+        # Frame para resumen
+        summary_card = crear_card(results_frame)
+        summary_card.pack(fill="x", pady=(0, 15))
+        
+        ctk.CTkLabel(
+            summary_card,
+            text="📊 Resumen Ejecutivo",
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(anchor="w", padx=15, pady=(10, 5))
+        
+        self.summary_text = ctk.CTkTextbox(summary_card, height=150, wrap="word")
+        self.summary_text.pack(fill="x", padx=15, pady=(0, 15))
+        self.summary_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
+        self.summary_text.configure(state="disabled")
+        
+        # Frame para riesgos altos
+        high_card = crear_card(results_frame)
+        high_card.pack(fill="x", pady=(0, 15))
+        
+        ctk.CTkLabel(
+            high_card,
+            text="🔴 RIESGOS ALTOS",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#e74c3c"
+        ).pack(anchor="w", padx=15, pady=(10, 5))
+        
+        self.high_risks_text = ctk.CTkTextbox(high_card, height=120, wrap="word")
+        self.high_risks_text.pack(fill="x", padx=15, pady=(0, 15))
+        self.high_risks_text.insert("1.0", "No se han detectado riesgos altos...")
+        self.high_risks_text.configure(state="disabled")
+        
+        # Frame para riesgos medios
+        medium_card = crear_card(results_frame)
+        medium_card.pack(fill="x", pady=(0, 15))
+        
+        ctk.CTkLabel(
+            medium_card,
+            text="🟡 RIESGOS MEDIOS",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#f39c12"
+        ).pack(anchor="w", padx=15, pady=(10, 5))
+        
+        self.medium_risks_text = ctk.CTkTextbox(medium_card, height=120, wrap="word")
+        self.medium_risks_text.pack(fill="x", padx=15, pady=(0, 15))
+        self.medium_risks_text.insert("1.0", "No se han detectado riesgos medios...")
+        self.medium_risks_text.configure(state="disabled")
+        
+        # Frame para riesgos bajos
+        low_card = crear_card(results_frame)
+        low_card.pack(fill="x", pady=(0, 15))
+        
+        ctk.CTkLabel(
+            low_card,
+            text="🟢 RIESGOS BAJOS / INFORMATIVOS",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#2ecc71"
+        ).pack(anchor="w", padx=15, pady=(10, 5))
+        
+        self.low_risks_text = ctk.CTkTextbox(low_card, height=100, wrap="word")
+        self.low_risks_text.pack(fill="x", padx=15, pady=(0, 15))
+        self.low_risks_text.insert("1.0", "No se han detectado riesgos bajos...")
+        self.low_risks_text.configure(state="disabled")
     
     def _build_footer(self, parent):
         """Construye el footer."""
@@ -290,8 +422,8 @@ class MainWindow:
         
         self.btn_export = ctk.CTkButton(
             buttons_frame,
-            text="📎 Exportar Texto",
-            command=self._on_export,
+            text="📎 Exportar Analisis",
+            command=self._export_analysis,
             width=150,
             height=40,
             fg_color="transparent",
@@ -379,9 +511,9 @@ class MainWindow:
                                                    f"Indexados {index_result['chunks_indexados']} chunks")
                 self.status_label.configure(text="✅ Documento procesado e indexado")
                 
-                # Habilitar botones de preguntas
+                # Habilitar botones
                 self.btn_ask.configure(state="normal")
-                self.btn_analyze_full.configure(state="normal")
+                self.btn_analyze.configure(state="normal")
                 self.btn_export.configure(state="normal")
             else:
                 self.status_label.configure(text="⚠️ Indexacion fallida")
@@ -464,32 +596,23 @@ Chunks: {resultado['total_chunks']}"""
         
         def task():
             try:
-                # Buscar chunks relevantes
-                resultados = self.rag_service.search(pregunta, k=4)
+                # Usar el workflow para analizar la pregunta
+                resultado = self.workflow.ejecutar_sync(
+                    self.current_contract_data['texto_completo'],
+                    consulta=pregunta
+                )
                 
-                if not resultados:
-                    respuesta = "No se encontro informacion relevante en el contrato para responder a tu pregunta.\n\nSugerencia: Intenta reformular la pregunta o se mas especifico."
-                    contexto_texto = "No se encontraron chunks relevantes."
+                if resultado.get("exito"):
+                    respuesta = resultado.get("resumen", "No se encontro informacion relevante.")
+                    contexto = "\n".join([
+                        f"- {h.get('descripcion', '')}" 
+                        for h in resultado.get("hallazgos_riesgo", [])[:3]
+                    ])
                 else:
-                    # Construir contexto
-                    contexto_texto = ""
-                    for i, res in enumerate(resultados, 1):
-                        score = res.get("score", 0)
-                        texto = res.get("texto", "")[:500]
-                        contexto_texto += f"\n[Chunk {i} - Relevancia: {score:.3f}]\n{texto}\n{'-'*50}\n"
-                    
-                    # Generar respuesta simple (por ahora mostramos los chunks)
-                    # En FASE 4 se integrara con Gemini para respuestas mas naturales
-                    respuesta = f"📌 **Informacion encontrada en el contrato:**\n\n"
-                    for i, res in enumerate(resultados, 1):
-                        score = res.get("score", 0)
-                        texto = res.get("texto", "")
-                        respuesta += f"\n**Fragmento {i} (relevancia: {score:.2f}):**\n{texto}\n\n"
-                    
-                    if len(resultados) == 0:
-                        respuesta = "No se encontraron clausulas relevantes para tu pregunta."
+                    respuesta = f"Error en el analisis: {resultado.get('error', 'Error desconocido')}"
+                    contexto = ""
                 
-                self.root.after(0, lambda: self._show_answer(respuesta, contexto_texto))
+                self.root.after(0, lambda: self._show_answer(respuesta, contexto))
                 
             except Exception as e:
                 logger.error(f"Error en pregunta: {e}")
@@ -504,78 +627,175 @@ Chunks: {resultado['total_chunks']}"""
         self.answer_text.insert("1.0", respuesta)
         self.answer_text.configure(state="disabled")
         
-        self.context_text.configure(state="normal")
-        self.context_text.delete("1.0", "end")
-        self.context_text.insert("1.0", contexto if contexto else "No se encontraron chunks relevantes")
-        self.context_text.configure(state="disabled")
+        if contexto:
+            self.context_text.configure(state="normal")
+            self.context_text.delete("1.0", "end")
+            self.context_text.insert("1.0", contexto)
+            self.context_text.configure(state="disabled")
         
         self.btn_ask.configure(state="normal", text="🔍 Preguntar")
         self.is_answering = False
     
-    def _generate_full_analysis(self):
-        """Genera un analisis completo del contrato."""
+    def _start_analysis(self):
+        """Inicia el analisis legal con los agentes."""
         if not self.current_contract_data:
             messagebox.showwarning("Sin documento", "Primero carga un contrato")
             return
         
-        self.btn_analyze_full.configure(state="disabled", text="Generando analisis...")
-        self.analysis_text.configure(state="normal")
-        self.analysis_text.delete("1.0", "end")
-        self.analysis_text.insert("1.0", "🔍 Analizando contrato...\n\nEsto puede tomar unos segundos...")
-        self.analysis_text.configure(state="disabled")
+        if self.is_analyzing:
+            messagebox.showwarning("En proceso", "Ya hay un analisis en curso")
+            return
+        
+        analysis_type = self.analysis_type_var.get()
+        
+        # Mapeo de tipos a consultas
+        consulta_map = {
+            "completo": "analizar todo el contrato",
+            "riesgo": "clausulas peligrosas penalizaciones rescision",
+            "fechas": "fechas importantes vencimiento plazo",
+            "obligaciones": "obligaciones de pago condiciones"
+        }
+        
+        consulta = consulta_map.get(analysis_type, "analizar")
+        
+        self.is_analyzing = True
+        self.btn_analyze.configure(state="disabled", text="Analizando...")
+        
+        # Mostrar barra de progreso
+        self.analysis_progress.pack(fill="x", pady=(0, 10))
+        self.analysis_progress.set(0.2)
+        
+        # Limpiar resultados anteriores
+        self.summary_text.configure(state="normal")
+        self.summary_text.delete("1.0", "end")
+        self.summary_text.insert("1.0", "🔍 Analizando contrato...\n\nEsto puede tomar unos segundos...")
+        self.summary_text.configure(state="disabled")
         
         def task():
             try:
-                # Buscar diferentes tipos de clausulas
-                queries = [
-                    "penalizacion multa incumplimiento",
-                    "rescision terminacion cancelacion",
-                    "renovacion automatica prorroga",
-                    "exclusividad no competencia",
-                    "responsabilidad limitada indemnizacion",
-                    "confidencialidad secreto"
-                ]
+                # Actualizar progreso
+                self.root.after(0, lambda: self.analysis_progress.set(0.5))
                 
-                analisis = "=" * 60 + "\n"
-                analisis += "ANALISIS LEGAL DEL CONTRATO\n"
-                analisis += "=" * 60 + "\n\n"
+                # Ejecutar workflow
+                resultado = self.workflow.ejecutar_sync(
+                    self.current_contract_data['texto_completo'],
+                    consulta=consulta
+                )
                 
-                for query in queries:
-                    resultados = self.rag_service.search(query, k=2)
-                    if resultados:
-                        analisis += f"\n📌 {query.upper()}\n"
-                        analisis += "-" * 40 + "\n"
-                        for res in resultados:
-                            score = res.get("score", 0)
-                            texto = res.get("texto", "")[:300]
-                            analisis += f"[Relevancia: {score:.2f}]\n{texto}\n\n"
+                self.root.after(0, lambda: self.analysis_progress.set(0.9))
                 
-                if len(analisis) < 200:
-                    analisis += "No se encontraron clausulas especificas en el contrato.\n"
-                    analisis += "El contrato puede ser muy corto o no contener clausulas tipicas."
+                if resultado.get("exito"):
+                    self.root.after(0, lambda: self._show_analysis_results(resultado))
+                else:
+                    self.root.after(0, lambda: self._show_analysis_error(resultado.get("error", "Error desconocido")))
                 
-                self.root.after(0, lambda: self._show_analysis(analisis))
+                self.root.after(0, lambda: self.analysis_progress.set(1.0))
                 
             except Exception as e:
                 logger.error(f"Error en analisis: {e}")
-                self.root.after(0, lambda: self._show_analysis(f"Error al generar analisis: {e}"))
+                self.root.after(0, lambda: self._show_analysis_error(str(e)))
         
         threading.Thread(target=task, daemon=True).start()
     
-    def _show_analysis(self, analisis: str):
-        """Muestra el analisis en la UI."""
-        self.analysis_text.configure(state="normal")
-        self.analysis_text.delete("1.0", "end")
-        self.analysis_text.insert("1.0", analisis)
-        self.analysis_text.configure(state="disabled")
+    def _show_analysis_results(self, resultado: dict):
+        """Muestra los resultados del analisis."""
         
-        self.btn_analyze_full.configure(state="normal", text="📊 Generar Analisis Completo")
+        # Actualizar resumen
+        self.summary_text.configure(state="normal")
+        self.summary_text.delete("1.0", "end")
+        self.summary_text.insert("1.0", resultado.get("resumen", "No se genero resumen"))
+        self.summary_text.configure(state="disabled")
+        
+        # Clasificar hallazgos
+        altos = []
+        medios = []
+        bajos = []
+        
+        for h in resultado.get("hallazgos_riesgo", []):
+            riesgo = h.get("riesgo", "MEDIO")
+            texto = f"• {h.get('descripcion', '')}\n  📍 {h.get('texto_relevante', '')[:100]}...\n  💡 {h.get('recomendacion', '')}\n\n"
+            if riesgo == "ALTO":
+                altos.append(texto)
+            elif riesgo == "MEDIO":
+                medios.append(texto)
+            else:
+                bajos.append(texto)
+        
+        for h in resultado.get("hallazgos_fechas", []):
+            riesgo = h.get("riesgo", "MEDIO")
+            texto = f"• {h.get('descripcion', '')}\n  📍 {h.get('texto_relevante', '')[:100]}...\n  💡 {h.get('recomendacion', '')}\n\n"
+            if riesgo == "ALTO":
+                altos.append(texto)
+            elif riesgo == "MEDIO":
+                medios.append(texto)
+            else:
+                bajos.append(texto)
+        
+        for h in resultado.get("hallazgos_obligaciones", []):
+            riesgo = h.get("riesgo", "MEDIO")
+            texto = f"• {h.get('descripcion', '')}\n  📍 {h.get('texto_relevante', '')[:100]}...\n  💡 {h.get('recomendacion', '')}\n\n"
+            if riesgo == "ALTO":
+                altos.append(texto)
+            elif riesgo == "MEDIO":
+                medios.append(texto)
+            else:
+                bajos.append(texto)
+        
+        # Actualizar riesgos altos
+        self.high_risks_text.configure(state="normal")
+        self.high_risks_text.delete("1.0", "end")
+        self.high_risks_text.insert("1.0", "".join(altos) if altos else "✅ No se detectaron riesgos altos")
+        self.high_risks_text.configure(state="disabled")
+        
+        # Actualizar riesgos medios
+        self.medium_risks_text.configure(state="normal")
+        self.medium_risks_text.delete("1.0", "end")
+        self.medium_risks_text.insert("1.0", "".join(medios) if medios else "✅ No se detectaron riesgos medios")
+        self.medium_risks_text.configure(state="disabled")
+        
+        # Actualizar riesgos bajos
+        self.low_risks_text.configure(state="normal")
+        self.low_risks_text.delete("1.0", "end")
+        self.low_risks_text.insert("1.0", "".join(bajos) if bajos else "✅ No se detectaron riesgos bajos")
+        self.low_risks_text.configure(state="disabled")
+        
+        # Habilitar exportacion
+        self.btn_export.configure(state="normal")
+        
+        # Finalizar
+        self.btn_analyze.configure(state="normal", text="🚀 Iniciar Analisis")
+        self.is_analyzing = False
+        
+        # Ocultar barra de progreso
+        self.root.after(2000, lambda: self.analysis_progress.pack_forget())
+        
+        # Cambiar a pestaña de resultados
+        self.status_label.configure(text="✅ Analisis completado")
+        messagebox.showinfo("Analisis Completado", 
+                           f"Analisis finalizado.\n\n"
+                           f"Riesgos Altos: {len(altos)}\n"
+                           f"Riesgos Medios: {len(medios)}\n"
+                           f"Riesgos Bajos: {len(bajos)}")
     
-    def _on_export(self):
-        """Exporta el texto del contrato."""
-        if not self.current_contract_data:
-            messagebox.showwarning("Sin documento", "Carga un contrato primero")
-            return
+    def _show_analysis_error(self, error: str):
+        """Muestra error en el analisis."""
+        self.summary_text.configure(state="normal")
+        self.summary_text.delete("1.0", "end")
+        self.summary_text.insert("1.0", f"❌ Error en el analisis:\n\n{error}")
+        self.summary_text.configure(state="disabled")
+        
+        self.btn_analyze.configure(state="normal", text="🚀 Iniciar Analisis")
+        self.is_analyzing = False
+        self.analysis_progress.pack_forget()
+        self.status_label.configure(text="❌ Error en analisis")
+    
+    def _export_analysis(self):
+        """Exporta el analisis completo."""
+        # Obtener todos los textos de resultados
+        resumen = self.summary_text.get("1.0", "end-1c")
+        altos = self.high_risks_text.get("1.0", "end-1c")
+        medios = self.medium_risks_text.get("1.0", "end-1c")
+        bajos = self.low_risks_text.get("1.0", "end-1c")
         
         archivo = filedialog.asksaveasfilename(
             defaultextension=".txt",
@@ -586,25 +806,29 @@ Chunks: {resultado['total_chunks']}"""
             try:
                 with open(archivo, 'w', encoding='utf-8') as f:
                     f.write("=" * 60 + "\n")
-                    f.write("CONTRACT ANALYZER PRO - TEXTO DEL CONTRATO\n")
+                    f.write("CONTRACT ANALYZER PRO - ANALISIS LEGAL\n")
                     f.write("=" * 60 + "\n\n")
-                    f.write(f"Archivo: {self.current_contract_data['nombre_archivo']}\n")
-                    f.write(f"Paginas: {self.current_contract_data['total_paginas']}\n")
-                    f.write(f"Caracteres: {self.current_contract_data['total_caracteres']}\n")
-                    f.write(f"Chunks: {self.current_contract_data['total_chunks']}\n\n")
-                    f.write("=" * 60 + "\n")
-                    f.write("TEXTO COMPLETO\n")
-                    f.write("=" * 60 + "\n\n")
-                    f.write(self.current_contract_data['texto_completo'])
+                    f.write("RESUMEN EJECUTIVO\n")
+                    f.write("-" * 40 + "\n")
+                    f.write(resumen + "\n\n")
+                    f.write("RIESGOS ALTOS\n")
+                    f.write("-" * 40 + "\n")
+                    f.write(altos + "\n\n")
+                    f.write("RIESGOS MEDIOS\n")
+                    f.write("-" * 40 + "\n")
+                    f.write(medios + "\n\n")
+                    f.write("RIESGOS BAJOS\n")
+                    f.write("-" * 40 + "\n")
+                    f.write(bajos + "\n")
                 
-                messagebox.showinfo("Exito", f"Texto exportado a:\n{archivo}")
+                messagebox.showinfo("Exito", f"Analisis exportado a:\n{archivo}")
             except Exception as e:
                 messagebox.showerror("Error", str(e))
     
     def _on_clear(self):
         """Limpia el contrato actual."""
-        if self.is_processing:
-            messagebox.showwarning("En proceso", "Espera a que termine el procesamiento")
+        if self.is_processing or self.is_analyzing or self.is_answering:
+            messagebox.showwarning("En proceso", "Espera a que termine el proceso actual")
             return
         
         self.current_contract_data = None
@@ -634,16 +858,31 @@ Chunks: {resultado['total_chunks']}"""
         self.context_text.insert("1.0", "El contexto usado para generar la respuesta aparecera aqui...")
         self.context_text.configure(state="disabled")
         
-        self.analysis_text.configure(state="normal")
-        self.analysis_text.delete("1.0", "end")
-        self.analysis_text.insert("1.0", "El analisis legal aparecera aqui...")
-        self.analysis_text.configure(state="disabled")
+        self.summary_text.configure(state="normal")
+        self.summary_text.delete("1.0", "end")
+        self.summary_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
+        self.summary_text.configure(state="disabled")
+        
+        self.high_risks_text.configure(state="normal")
+        self.high_risks_text.delete("1.0", "end")
+        self.high_risks_text.insert("1.0", "No se han detectado riesgos altos...")
+        self.high_risks_text.configure(state="disabled")
+        
+        self.medium_risks_text.configure(state="normal")
+        self.medium_risks_text.delete("1.0", "end")
+        self.medium_risks_text.insert("1.0", "No se han detectado riesgos medios...")
+        self.medium_risks_text.configure(state="disabled")
+        
+        self.low_risks_text.configure(state="normal")
+        self.low_risks_text.delete("1.0", "end")
+        self.low_risks_text.insert("1.0", "No se han detectado riesgos bajos...")
+        self.low_risks_text.configure(state="disabled")
         
         self.stats_label.configure(text="")
         self.status_label.configure(text="✅ Sistema listo")
         
         self.btn_ask.configure(state="disabled")
-        self.btn_analyze_full.configure(state="disabled")
+        self.btn_analyze.configure(state="disabled")
         self.btn_export.configure(state="disabled")
         
         self.file_upload._reset_state()
@@ -652,7 +891,7 @@ Chunks: {resultado['total_chunks']}"""
     
     def _on_closing(self):
         """Maneja el cierre de la ventana."""
-        if self.is_processing or self.is_answering:
+        if self.is_processing or self.is_analyzing or self.is_answering:
             respuesta = messagebox.askyesno("Salir", "Hay un proceso en curso. ¿Seguro que quieres salir?")
             if respuesta:
                 self.root.destroy()
