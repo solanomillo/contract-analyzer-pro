@@ -5,7 +5,8 @@ Construye un grafo de ejecucion con nodos y conexiones condicionales.
 
 import logging
 import asyncio
-from typing import TypedDict, List, Dict, Any, Optional
+import operator
+from typing import TypedDict, List, Dict, Any, Optional, Annotated
 
 from langgraph.graph import StateGraph, START, END
 
@@ -19,11 +20,11 @@ logger = logging.getLogger(__name__)
 class EstadoAnalisis(TypedDict):
     texto: str
     consulta: Optional[str]
-    hallazgos_riesgo: List[Dict[str, Any]]
-    hallazgos_fechas: List[Dict[str, Any]]
-    hallazgos_obligaciones: List[Dict[str, Any]]
+    hallazgos_riesgo: Annotated[List[Dict[str, Any]], operator.add]
+    hallazgos_fechas: Annotated[List[Dict[str, Any]], operator.add]
+    hallazgos_obligaciones: Annotated[List[Dict[str, Any]], operator.add]
     nodo_actual: str
-    errores: List[str]
+    errores: Annotated[List[str], operator.add]
     completado: bool
     resultado_final: str
     resumen: str
@@ -49,14 +50,14 @@ class AnalisisWorkflow:
         """
         Construye el grafo de ejecucion.
         
-        Para evitar el error "unhashable type: list", NO usamos listas en conditional edges.
-        En su lugar, usamos un nodo "dispatcher" que ejecuta los agentes en secuencia.
+        IMPORTANTE: NO usar listas en conditional edges.
+        Usamos un nodo "dispatcher" que ejecuta los agentes secuencialmente.
         """
         workflow = StateGraph(EstadoAnalisis)
         
         # Nodos
         workflow.add_node("router", self._router_node)
-        workflow.add_node("dispatcher", self._dispatcher_node)  # Nodo que orquesta los agentes
+        workflow.add_node("dispatcher", self._dispatcher_node)
         workflow.add_node("riesgo", self._risk_node)
         workflow.add_node("fechas", self._date_node)
         workflow.add_node("obligaciones", self._obligation_node)
@@ -66,7 +67,7 @@ class AnalisisWorkflow:
         # START -> Router
         workflow.add_edge(START, "router")
         
-        # Router -> Dispatcher (si es "todos") o directamente al agente
+        # Router -> Dispatcher o agente individual
         workflow.add_conditional_edges(
             "router",
             self._router_decision,
@@ -74,11 +75,11 @@ class AnalisisWorkflow:
                 "riesgo": "riesgo",
                 "fechas": "fechas",
                 "obligaciones": "obligaciones",
-                "todos": "dispatcher"  # Dispatcher se encarga de ejecutar todos
+                "todos": "dispatcher"
             }
         )
         
-        # Dispatcher ejecuta todos los agentes secuencialmente
+        # Dispatcher ejecuta los agentes secuencialmente
         workflow.add_edge("dispatcher", "riesgo")
         workflow.add_edge("riesgo", "fechas")
         workflow.add_edge("fechas", "obligaciones")
@@ -103,12 +104,15 @@ class AnalisisWorkflow:
         estado["hallazgos_fechas"] = []
         estado["hallazgos_obligaciones"] = []
         estado["errores"] = []
+        estado["completado"] = False
+        estado["resultado_final"] = ""
+        estado["resumen"] = ""
         
         return estado
     
     def _dispatcher_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        """Nodo dispatcher: prepara para ejecutar todos los agentes."""
-        logger.info("Dispatcher: preparando ejecucion de todos los agentes")
+        """Nodo dispatcher: solo pasa el estado sin modificarlo."""
+        logger.info("Dispatcher: ejecutando todos los agentes secuencialmente")
         estado["nodo_actual"] = "dispatcher"
         return estado
     
@@ -268,7 +272,6 @@ class AnalisisWorkflow:
     
     async def ejecutar(self, texto: str, consulta: Optional[str] = None) -> Dict[str, Any]:
         logger.info(f"Ejecutando workflow con consulta: {consulta or 'completa'}")
-        logger.info(f"Longitud del texto: {len(texto)} caracteres")
         
         estado_inicial: EstadoAnalisis = {
             "texto": texto[:8000],
