@@ -28,7 +28,11 @@ class MainWindow:
         """Inicializa la ventana principal."""
         self.root = ctk.CTk()
         self.root.title("Contract Analyzer Pro - Analizador de Contratos")
+        
+        # Hacer la ventana movible y redimensionable correctamente
         self.root.geometry("1400x900")
+        self.root.minsize(1200, 700)  # Tamaño mínimo para que no se corte
+        self.root.resizable(True, True)  # Permitir redimensionar
         
         # Configurar tema
         self.colores = configurar_tema()
@@ -37,7 +41,13 @@ class MainWindow:
         self.processing_service = ProcessingService()
         self.config_service = ConfigService()
         self.rag_service = RAGService()
-        self.workflow = AnalisisWorkflow(api_key=self.config_service.get_api_key())
+        
+        # Inicializar workflow con manejo de errores
+        try:
+            self.workflow = AnalisisWorkflow(api_key=self.config_service.get_api_key())
+        except Exception as e:
+            logger.error(f"Error inicializando workflow: {e}")
+            self.workflow = None
         
         self.current_contract_data = None
         self.current_pdf_path = None
@@ -66,25 +76,37 @@ class MainWindow:
     def _build_ui(self):
         """Construye la interfaz de usuario."""
         
-        # Frame principal
+        # Frame principal - usar grid para mejor comportamiento al redimensionar
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+        
         main_frame = ctk.CTkFrame(self.root, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
+        main_frame.grid_rowconfigure(2, weight=1)  # Fila del contenido expandible
+        main_frame.grid_columnconfigure(0, weight=1)
         
         # Header
         self._build_header(main_frame)
         
         # Contenido principal (2 columnas)
         content_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        content_frame.pack(fill="both", expand=True, pady=20)
+        content_frame.grid(row=1, column=0, sticky="nsew", pady=20)
+        content_frame.grid_columnconfigure(0, weight=1)
+        content_frame.grid_columnconfigure(1, weight=1)
+        content_frame.grid_rowconfigure(0, weight=1)
         
         # Columna izquierda
         left_column = ctk.CTkFrame(content_frame, fg_color="transparent")
-        left_column.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        left_column.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        left_column.grid_rowconfigure(1, weight=1)
+        left_column.grid_columnconfigure(0, weight=1)
         self._build_upload_area(left_column)
         
         # Columna derecha
         right_column = ctk.CTkFrame(content_frame, fg_color="transparent")
-        right_column.pack(side="right", fill="both", expand=True, padx=(10, 0))
+        right_column.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        right_column.grid_rowconfigure(0, weight=1)
+        right_column.grid_columnconfigure(0, weight=1)
         self._build_preview_area(right_column)
         
         # Footer
@@ -93,14 +115,15 @@ class MainWindow:
     def _build_header(self, parent):
         """Construye el header."""
         header_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        header_frame.pack(fill="x")
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        header_frame.grid_columnconfigure(0, weight=1)
         
         titulo = crear_titulo(header_frame, "CONTRACT ANALYZER PRO", 24)
-        titulo.pack(side="left")
+        titulo.grid(row=0, column=0, sticky="w")
         
         # Botones header
         header_buttons = ctk.CTkFrame(header_frame, fg_color="transparent")
-        header_buttons.pack(side="right")
+        header_buttons.grid(row=0, column=1, sticky="e")
         
         self.btn_cambiar_api = ctk.CTkButton(
             header_buttons,
@@ -124,7 +147,7 @@ class MainWindow:
     def _build_upload_area(self, parent):
         """Construye el area de carga."""
         upload_card = crear_card(parent)
-        upload_card.pack(fill="x", pady=(0, 20))
+        upload_card.grid(row=0, column=0, sticky="ew", pady=(0, 20))
         
         ctk.CTkLabel(
             upload_card,
@@ -144,7 +167,7 @@ class MainWindow:
         
         # Info contrato
         info_card = crear_card(parent)
-        info_card.pack(fill="x")
+        info_card.grid(row=1, column=0, sticky="nsew")
         
         ctk.CTkLabel(
             info_card,
@@ -152,8 +175,8 @@ class MainWindow:
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(anchor="w", padx=20, pady=(15, 10))
         
-        self.info_text = ctk.CTkTextbox(info_card, height=150, wrap="word")
-        self.info_text.pack(fill="both", padx=20, pady=(0, 20))
+        self.info_text = ctk.CTkTextbox(info_card, wrap="word")
+        self.info_text.pack(fill="both", expand=True, padx=20, pady=(0, 20))
         self.info_text.insert("1.0", "Esperando carga de documento...")
         self.info_text.configure(state="disabled")
     
@@ -319,15 +342,13 @@ class MainWindow:
         self.analysis_progress = ctk.CTkProgressBar(parent, width=400)
         self.analysis_progress.pack(fill="x", pady=(0, 10))
         self.analysis_progress.set(0)
-        self.analysis_progress.pack_forget()  # Ocultar inicialmente
+        self.analysis_progress.pack_forget()
     
     def _build_results_tab(self, parent):
         """Construye la pestaña de resultados del analisis."""
-        # Contenedor con scroll para resultados
         results_frame = ctk.CTkScrollableFrame(parent)
         results_frame.pack(fill="both", expand=True)
         
-        # Titulo de resultados
         self.results_title = ctk.CTkLabel(
             results_frame,
             text="Resultados del Analisis",
@@ -401,7 +422,7 @@ class MainWindow:
     def _build_footer(self, parent):
         """Construye el footer."""
         footer_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        footer_frame.pack(fill="x", pady=(10, 0))
+        footer_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         
         separator = ctk.CTkFrame(footer_frame, height=1, fg_color="#3d3d3d")
         separator.pack(fill="x", pady=(0, 15))
@@ -530,12 +551,52 @@ class MainWindow:
         self.root.after(2000, self.progress_card.hide)
     
     def _on_process_error(self, error: str):
-        """Maneja error en el procesamiento."""
+        """Maneja error en el procesamiento con mensajes amigables."""
         self.is_processing = False
         self.file_upload.set_loading(False)
         self.progress_card.hide()
         self.status_label.configure(text="❌ Error en procesamiento")
-        messagebox.showerror("Error", f"No se pudo procesar el PDF:\n\n{error}")
+        
+        # Manejo especifico para error 503 (servicio no disponible)
+        if "503" in error or "UNAVAILABLE" in error or "high demand" in error.lower():
+            messagebox.showerror(
+                "Servicio Temporalmente No Disponible",
+                "El servicio de Gemini está experimentando alta demanda.\n\n"
+                "Sugerencias para resolver:\n"
+                "1. Espera unos minutos y vuelve a intentar\n"
+                "2. Cambia a otro modelo en la configuración\n"
+                "   - Usa GEMINI_MODEL=gemini-2.0-flash en el archivo .env\n"
+                "3. Reinicia la aplicación\n\n"
+                f"Error técnico: {error}"
+            )
+        elif "quota" in error.lower() or "exceeded" in error.lower():
+            messagebox.showerror(
+                "Cuota de API Agotada",
+                "La cuota de la API key se ha agotado.\n\n"
+                "Soluciones:\n"
+                "1. Usa otra API key (botón 'Cambiar API Key')\n"
+                "2. Espera a que se renueve la cuota (generalmente al día siguiente)\n"
+                "3. Considera actualizar a un plan de pago\n\n"
+                f"Error: {error}"
+            )
+        elif "invalid" in error.lower() or "unauthorized" in error.lower():
+            messagebox.showerror(
+                "API Key Invalida",
+                "La API key configurada no es valida.\n\n"
+                "Soluciones:\n"
+                "1. Haz clic en 'Cambiar API Key' para ingresar una nueva\n"
+                "2. Obtén una API key gratis en: https://makersuite.google.com/app/apikey\n\n"
+                f"Error: {error}"
+            )
+        else:
+            messagebox.showerror(
+                "Error de Procesamiento", 
+                f"No se pudo procesar el PDF:\n\n{error}\n\n"
+                "Posibles causas:\n"
+                "- El PDF puede estar dañado o ser una imagen\n"
+                "- El archivo no tiene texto extraible\n"
+                "- Problema de conexión con Gemini"
+            )
     
     def _update_contract_info(self, resultado: dict):
         """Actualiza la informacion del contrato."""
@@ -596,7 +657,16 @@ Chunks: {resultado['total_chunks']}"""
         
         def task():
             try:
-                # Usar el workflow para analizar la pregunta
+                if self.workflow is None:
+                    self.root.after(0, lambda: self._show_answer(
+                        "Error: El sistema de analisis no esta disponible.\n\n"
+                        "Posibles causas:\n"
+                        "- API key invalida\n"
+                        "- Problema de conexion con Gemini",
+                        ""
+                    ))
+                    return
+                
                 resultado = self.workflow.ejecutar_sync(
                     self.current_contract_data['texto_completo'],
                     consulta=pregunta
@@ -616,7 +686,12 @@ Chunks: {resultado['total_chunks']}"""
                 
             except Exception as e:
                 logger.error(f"Error en pregunta: {e}")
-                self.root.after(0, lambda: self._show_answer(f"Error al procesar la pregunta: {e}", ""))
+                error_msg = str(e)
+                if "503" in error_msg or "UNAVAILABLE" in error_msg:
+                    respuesta = "El servicio de Gemini está con alta demanda. Por favor, intenta nuevamente en unos minutos."
+                else:
+                    respuesta = f"Error al procesar la pregunta: {error_msg}"
+                self.root.after(0, lambda: self._show_answer(respuesta, ""))
         
         threading.Thread(target=task, daemon=True).start()
     
@@ -648,7 +723,6 @@ Chunks: {resultado['total_chunks']}"""
         
         analysis_type = self.analysis_type_var.get()
         
-        # Mapeo de tipos a consultas
         consulta_map = {
             "completo": "analizar todo el contrato",
             "riesgo": "clausulas peligrosas penalizaciones rescision",
@@ -661,11 +735,9 @@ Chunks: {resultado['total_chunks']}"""
         self.is_analyzing = True
         self.btn_analyze.configure(state="disabled", text="Analizando...")
         
-        # Mostrar barra de progreso
         self.analysis_progress.pack(fill="x", pady=(0, 10))
         self.analysis_progress.set(0.2)
         
-        # Limpiar resultados anteriores
         self.summary_text.configure(state="normal")
         self.summary_text.delete("1.0", "end")
         self.summary_text.insert("1.0", "🔍 Analizando contrato...\n\nEsto puede tomar unos segundos...")
@@ -673,10 +745,14 @@ Chunks: {resultado['total_chunks']}"""
         
         def task():
             try:
-                # Actualizar progreso
+                if self.workflow is None:
+                    self.root.after(0, lambda: self._show_analysis_error(
+                        "El sistema de analisis no esta disponible. Verifica tu API key."
+                    ))
+                    return
+                
                 self.root.after(0, lambda: self.analysis_progress.set(0.5))
                 
-                # Ejecutar workflow
                 resultado = self.workflow.ejecutar_sync(
                     self.current_contract_data['texto_completo'],
                     consulta=consulta
@@ -687,26 +763,30 @@ Chunks: {resultado['total_chunks']}"""
                 if resultado.get("exito"):
                     self.root.after(0, lambda: self._show_analysis_results(resultado))
                 else:
-                    self.root.after(0, lambda: self._show_analysis_error(resultado.get("error", "Error desconocido")))
+                    error_msg = resultado.get("error", "Error desconocido")
+                    if "503" in error_msg or "UNAVAILABLE" in error_msg:
+                        error_msg = "El servicio de Gemini está con alta demanda. Intenta nuevamente en unos minutos."
+                    self.root.after(0, lambda: self._show_analysis_error(error_msg))
                 
                 self.root.after(0, lambda: self.analysis_progress.set(1.0))
                 
             except Exception as e:
                 logger.error(f"Error en analisis: {e}")
-                self.root.after(0, lambda: self._show_analysis_error(str(e)))
+                error_msg = str(e)
+                if "503" in error_msg or "UNAVAILABLE" in error_msg:
+                    error_msg = "El servicio de Gemini está con alta demanda. Intenta nuevamente en unos minutos."
+                self.root.after(0, lambda: self._show_analysis_error(error_msg))
         
         threading.Thread(target=task, daemon=True).start()
     
     def _show_analysis_results(self, resultado: dict):
         """Muestra los resultados del analisis."""
         
-        # Actualizar resumen
         self.summary_text.configure(state="normal")
         self.summary_text.delete("1.0", "end")
         self.summary_text.insert("1.0", resultado.get("resumen", "No se genero resumen"))
         self.summary_text.configure(state="disabled")
         
-        # Clasificar hallazgos
         altos = []
         medios = []
         bajos = []
@@ -741,35 +821,28 @@ Chunks: {resultado['total_chunks']}"""
             else:
                 bajos.append(texto)
         
-        # Actualizar riesgos altos
         self.high_risks_text.configure(state="normal")
         self.high_risks_text.delete("1.0", "end")
         self.high_risks_text.insert("1.0", "".join(altos) if altos else "✅ No se detectaron riesgos altos")
         self.high_risks_text.configure(state="disabled")
         
-        # Actualizar riesgos medios
         self.medium_risks_text.configure(state="normal")
         self.medium_risks_text.delete("1.0", "end")
         self.medium_risks_text.insert("1.0", "".join(medios) if medios else "✅ No se detectaron riesgos medios")
         self.medium_risks_text.configure(state="disabled")
         
-        # Actualizar riesgos bajos
         self.low_risks_text.configure(state="normal")
         self.low_risks_text.delete("1.0", "end")
         self.low_risks_text.insert("1.0", "".join(bajos) if bajos else "✅ No se detectaron riesgos bajos")
         self.low_risks_text.configure(state="disabled")
         
-        # Habilitar exportacion
         self.btn_export.configure(state="normal")
         
-        # Finalizar
         self.btn_analyze.configure(state="normal", text="🚀 Iniciar Analisis")
         self.is_analyzing = False
         
-        # Ocultar barra de progreso
         self.root.after(2000, lambda: self.analysis_progress.pack_forget())
         
-        # Cambiar a pestaña de resultados
         self.status_label.configure(text="✅ Analisis completado")
         messagebox.showinfo("Analisis Completado", 
                            f"Analisis finalizado.\n\n"
@@ -791,7 +864,6 @@ Chunks: {resultado['total_chunks']}"""
     
     def _export_analysis(self):
         """Exporta el analisis completo."""
-        # Obtener todos los textos de resultados
         resumen = self.summary_text.get("1.0", "end-1c")
         altos = self.high_risks_text.get("1.0", "end-1c")
         medios = self.medium_risks_text.get("1.0", "end-1c")
@@ -834,22 +906,20 @@ Chunks: {resultado['total_chunks']}"""
         self.current_contract_data = None
         self.current_pdf_path = None
         
-        # Limpiar RAG
-        self.rag_service.clear()
+        if self.rag_service:
+            self.rag_service.clear()
         
-        # Limpiar UI - Informacion del contrato
+        # Limpiar UI
         self.info_text.configure(state="normal")
         self.info_text.delete("1.0", "end")
         self.info_text.insert("1.0", "Esperando carga de documento...")
         self.info_text.configure(state="disabled")
         
-        # Limpiar UI - Preview de texto
         self.preview_text.configure(state="normal")
         self.preview_text.delete("1.0", "end")
         self.preview_text.insert("1.0", "El texto del contrato aparecera aqui...")
         self.preview_text.configure(state="disabled")
         
-        # Limpiar UI - Preguntas y respuestas
         self.answer_text.configure(state="normal")
         self.answer_text.delete("1.0", "end")
         self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
@@ -860,7 +930,6 @@ Chunks: {resultado['total_chunks']}"""
         self.context_text.insert("1.0", "El contexto usado para generar la respuesta aparecera aqui...")
         self.context_text.configure(state="disabled")
         
-        # Limpiar UI - Resultados del analisis
         self.summary_text.configure(state="normal")
         self.summary_text.delete("1.0", "end")
         self.summary_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
@@ -881,30 +950,22 @@ Chunks: {resultado['total_chunks']}"""
         self.low_risks_text.insert("1.0", "No se han detectado riesgos bajos...")
         self.low_risks_text.configure(state="disabled")
         
-        # Limpiar pregunta
         self.question_entry.delete("1.0", "end")
         self.question_entry.insert("1.0", "Ejemplo: Cuales son las penalizaciones por incumplimiento?")
         
-        # Limpiar estadisticas y estado
         self.stats_label.configure(text="")
         self.status_label.configure(text="✅ Sistema listo")
         
-        # DESHABILITAR BOTONES
         self.btn_ask.configure(state="disabled")
         self.btn_analyze.configure(state="disabled")
         self.btn_export.configure(state="disabled")
         
-        # RESTAURAR COMPONENTE DE CARGA - CORREGIDO
-        # Usar el metodo publico reset_state() en lugar de _reset_state()
-        self.file_upload.reset_state()  # <--- CAMBIADO: sin underscore
+        # Restaurar componente de carga
+        self.file_upload.reset_state()
         self.file_upload.set_loading(False)
-        # No es necesario forzar btn_select porque reset_state() ya lo hace
         
-        # Ocultar barra de progreso si estaba visible
         self.progress_card.hide()
         self.analysis_progress.pack_forget()
-        
-        # Resetear progreso
         self.progress_card.reset()
         
         messagebox.showinfo("Limpieza", "Contrato eliminado correctamente.\n\nPuedes cargar un nuevo contrato.")
