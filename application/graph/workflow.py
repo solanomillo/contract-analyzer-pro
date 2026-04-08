@@ -141,78 +141,195 @@ class AnalisisWorkflow:
         try:
             texto = estado.get("texto", "")
             hallazgos = self.complete_agent.analizar(texto)
-            estado["hallazgos"] = [h.to_dict() for h in hallazgos]
+            
+            # Verificar si hubo error en el agente
+            ultimo_error = self.complete_agent.get_ultimo_error()
+            if ultimo_error:
+                logger.error(f"Error en agente completo: {ultimo_error}")
+                # Crear un hallazgo de error para mostrar al usuario
+                error_hallazgo = {
+                    "tipo": "error",
+                    "descripcion": ultimo_error,
+                    "riesgo": "ALTO",
+                    "texto_relevante": "",
+                    "recomendacion": "Revisa tu conexion o cambia de modelo en la configuracion. Se recomienda usar gemini-2.0-flash que es mas estable."
+                }
+                estado["hallazgos"] = [error_hallazgo]
+                estado["errores"].append(ultimo_error)
+            else:
+                estado["hallazgos"] = [h.to_dict() for h in hallazgos]
+            
             estado["agente_usado"] = "completo"
-            logger.info(f"Analisis completo generado: {len(hallazgos)} hallazgos")
+            logger.info(f"Analisis completo generado: {len(estado['hallazgos'])} hallazgos")
                 
         except Exception as e:
             logger.error(f"Error en agente completo: {e}")
+            error_hallazgo = {
+                "tipo": "error",
+                "descripcion": f"Error en el analisis: {str(e)[:200]}",
+                "riesgo": "ALTO",
+                "texto_relevante": "",
+                "recomendacion": "Intenta nuevamente o cambia el modelo en la configuracion a gemini-2.0-flash."
+            }
+            estado["hallazgos"] = [error_hallazgo]
             estado["errores"].append(str(e))
         
         return estado
     
     def _risk_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
+        """Nodo de deteccion de riesgos."""
         logger.info("Agente Riesgo: analizando...")
         
         try:
             texto = estado.get("texto", "")
             hallazgos = self.risk_agent.analizar(texto)
-            estado["hallazgos"] = [h.to_dict() for h in hallazgos]
+            
+            # Verificar si hubo error en el agente
+            ultimo_error = self.risk_agent.get_ultimo_error()
+            if ultimo_error:
+                logger.error(f"Error en agente riesgo: {ultimo_error}")
+                error_hallazgo = {
+                    "tipo": "error",
+                    "descripcion": ultimo_error,
+                    "riesgo": "ALTO",
+                    "texto_relevante": "",
+                    "recomendacion": "Revisa tu conexion o cambia de modelo en la configuracion."
+                }
+                estado["hallazgos"] = [error_hallazgo]
+                estado["errores"].append(ultimo_error)
+            else:
+                estado["hallazgos"] = [h.to_dict() for h in hallazgos]
+            
             estado["agente_usado"] = "riesgo"
-            logger.info(f"Hallazgos encontrados: {len(hallazgos)}")
+            logger.info(f"Hallazgos encontrados: {len(estado['hallazgos'])}")
             
             for h in hallazgos:
                 logger.info(f"  - {h.tipo}: {h.descripcion[:50]}... (riesgo: {h.riesgo})")
                 
         except Exception as e:
             logger.error(f"Error en agente riesgo: {e}")
+            error_hallazgo = {
+                "tipo": "error",
+                "descripcion": f"Error en el analisis: {str(e)[:200]}",
+                "riesgo": "ALTO",
+                "texto_relevante": "",
+                "recomendacion": "Intenta nuevamente."
+            }
+            estado["hallazgos"] = [error_hallazgo]
             estado["errores"].append(str(e))
         
         return estado
     
     def _date_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
+        """Nodo de extraccion de fechas."""
         logger.info("Agente Fechas: extrayendo...")
         
         try:
             texto = estado.get("texto", "")
             hallazgos = self.date_agent.analizar(texto)
-            estado["hallazgos"] = [h.to_dict() for h in hallazgos]
+            
+            ultimo_error = self.date_agent.get_ultimo_error()
+            if ultimo_error:
+                logger.error(f"Error en agente fechas: {ultimo_error}")
+                error_hallazgo = {
+                    "tipo": "error",
+                    "descripcion": ultimo_error,
+                    "riesgo": "MEDIO",
+                    "texto_relevante": "",
+                    "recomendacion": "Revisa tu conexion o cambia de modelo."
+                }
+                estado["hallazgos"] = [error_hallazgo]
+                estado["errores"].append(ultimo_error)
+            else:
+                estado["hallazgos"] = [h.to_dict() for h in hallazgos]
+            
             estado["agente_usado"] = "fechas"
-            logger.info(f"Hallazgos encontrados: {len(hallazgos)}")
+            logger.info(f"Hallazgos encontrados: {len(estado['hallazgos'])}")
             
             for h in hallazgos:
                 logger.info(f"  - {h.tipo}: {h.descripcion[:50]}...")
                 
         except Exception as e:
             logger.error(f"Error en agente fechas: {e}")
+            error_hallazgo = {
+                "tipo": "error",
+                "descripcion": f"Error en analisis de fechas: {str(e)[:200]}",
+                "riesgo": "MEDIO",
+                "texto_relevante": "",
+                "recomendacion": "Intenta nuevamente."
+            }
+            estado["hallazgos"] = [error_hallazgo]
             estado["errores"].append(str(e))
         
         return estado
     
     def _obligation_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
+        """Nodo de deteccion de obligaciones."""
         logger.info("Agente Obligaciones: detectando...")
         
         try:
             texto = estado.get("texto", "")
             hallazgos = self.obligation_agent.analizar(texto)
-            estado["hallazgos"] = [h.to_dict() for h in hallazgos]
+            
+            ultimo_error = self.obligation_agent.get_ultimo_error()
+            if ultimo_error:
+                logger.error(f"Error en agente obligaciones: {ultimo_error}")
+                error_hallazgo = {
+                    "tipo": "error",
+                    "descripcion": ultimo_error,
+                    "riesgo": "MEDIO",
+                    "texto_relevante": "",
+                    "recomendacion": "Revisa tu conexion o cambia de modelo."
+                }
+                estado["hallazgos"] = [error_hallazgo]
+                estado["errores"].append(ultimo_error)
+            else:
+                estado["hallazgos"] = [h.to_dict() for h in hallazgos]
+            
             estado["agente_usado"] = "obligaciones"
-            logger.info(f"Hallazgos encontrados: {len(hallazgos)}")
+            logger.info(f"Hallazgos encontrados: {len(estado['hallazgos'])}")
             
             for h in hallazgos:
                 logger.info(f"  - {h.tipo}: {h.descripcion[:50]}...")
                 
         except Exception as e:
             logger.error(f"Error en agente obligaciones: {e}")
+            error_hallazgo = {
+                "tipo": "error",
+                "descripcion": f"Error en analisis de obligaciones: {str(e)[:200]}",
+                "riesgo": "MEDIO",
+                "texto_relevante": "",
+                "recomendacion": "Intenta nuevamente."
+            }
+            estado["hallazgos"] = [error_hallazgo]
             estado["errores"].append(str(e))
         
         return estado
     
     def _final_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
+        """Nodo final: genera el resumen del analisis."""
         logger.info("Final: generando resumen...")
         
         hallazgos = estado.get("hallazgos", [])
         
+        # Verificar si hay error
+        hay_error = any(h.get("tipo") == "error" for h in hallazgos)
+        
+        if hay_error:
+            # Mostrar mensaje de error
+            resumen = []
+            resumen.append("=" * 60)
+            resumen.append("ERROR EN EL ANALISIS")
+            resumen.append("=" * 60)
+            for h in hallazgos:
+                if h.get("tipo") == "error":
+                    resumen.append(f"\n{h.get('descripcion', '')}")
+                    resumen.append(f"\nRecomendacion: {h.get('recomendacion', '')}")
+            estado["resumen"] = "\n".join(resumen)
+            estado["resultado_final"] = estado["resumen"]
+            return estado
+        
+        # Clasificar por nivel de riesgo
         altos = [h for h in hallazgos if h.get("riesgo") == "ALTO"]
         medios = [h for h in hallazgos if h.get("riesgo") == "MEDIO"]
         bajos = [h for h in hallazgos if h.get("riesgo") == "BAJO"]
@@ -223,19 +340,25 @@ class AnalisisWorkflow:
         resumen.append("=" * 60)
         resumen.append(f"\nAgente utilizado: {estado.get('agente_usado', 'desconocido')}")
         
-        resumen.append(f"\n🔴 RIESGOS ALTOS: {len(altos)}")
+        resumen.append(f"\n{'=' * 60}")
+        resumen.append(f"RIESGOS ALTOS ({len(altos)})")
+        resumen.append("=" * 60)
         for r in altos[:5]:
             desc = r.get('descripcion', '')[:100]
             if desc:
-                resumen.append(f"  • {desc}")
+                resumen.append(f"  * {desc}")
         
-        resumen.append(f"\n🟡 RIESGOS MEDIOS: {len(medios)}")
+        resumen.append(f"\n{'=' * 60}")
+        resumen.append(f"RIESGOS MEDIOS ({len(medios)})")
+        resumen.append("=" * 60)
         for r in medios[:5]:
             desc = r.get('descripcion', '')[:100]
             if desc:
-                resumen.append(f"  • {desc}")
+                resumen.append(f"  * {desc}")
         
-        resumen.append(f"\n🟢 RIESGOS BAJOS / INFORMATIVOS: {len(bajos)}")
+        resumen.append(f"\n{'=' * 60}")
+        resumen.append(f"RIESGOS BAJOS / INFORMATIVOS ({len(bajos)})")
+        resumen.append("=" * 60)
         
         if altos:
             resumen.append("\n" + "!" * 60)
@@ -244,9 +367,12 @@ class AnalisisWorkflow:
             for r in altos[:3]:
                 rec = r.get('recomendacion', '')
                 if rec:
-                    resumen.append(f"  • {rec[:150]}")
+                    resumen.append(f"  * {rec[:150]}")
         
         estado["resumen"] = "\n".join(resumen)
+        estado["resultado_final"] = estado["resumen"]
+        
+        logger.info(f"Resumen generado: {len(altos)} altos, {len(medios)} medios, {len(bajos)} bajos")
         
         return estado
     

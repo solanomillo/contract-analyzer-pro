@@ -83,6 +83,12 @@ class CompleteAnalysisAgent(BaseAgent):
         """
         
         respuesta = self._call_llm(prompt)
+        
+        if not respuesta:
+            logger.warning(f"CompleteAnalysisAgent: {self._ultimo_error}")
+            # Retornar lista vacia, el error se maneja en el workflow
+            return []
+        
         datos = self._parsear_respuesta_json(respuesta)
         
         hallazgos = []

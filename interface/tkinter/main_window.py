@@ -312,7 +312,7 @@ class MainWindow:
         
         self.radio_completo = ctk.CTkRadioButton(
             options_frame,
-            text="Analisis Completo (todos los agentes)",
+            text="Analisis Completo (todos los aspectos)",
             variable=self.analysis_type_var,
             value="completo"
         )
@@ -382,11 +382,13 @@ class MainWindow:
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(anchor="w", padx=15, pady=(10, 5))
         
-        self.summary_text = ctk.CTkTextbox(summary_card, height=300, wrap="word")
+        self.summary_text = ctk.CTkTextbox(summary_card, height=400, wrap="word")
         self.summary_text.pack(fill="x", padx=15, pady=(0, 15))
         self.summary_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
         self.summary_text.configure(state="disabled")
         
+        # Nota: Las secciones separadas se mantienen pero se muestran mensajes
+        # indicando que los resultados estan en el resumen
         high_card = crear_card(results_frame)
         high_card.pack(fill="x", pady=(0, 15))
         
@@ -397,9 +399,9 @@ class MainWindow:
             text_color="#e74c3c"
         ).pack(anchor="w", padx=15, pady=(10, 5))
         
-        self.high_risks_text = ctk.CTkTextbox(high_card, height=120, wrap="word")
+        self.high_risks_text = ctk.CTkTextbox(high_card, height=100, wrap="word")
         self.high_risks_text.pack(fill="x", padx=15, pady=(0, 15))
-        self.high_risks_text.insert("1.0", "No se han detectado riesgos altos...")
+        self.high_risks_text.insert("1.0", "Ver detalles en el Resumen Ejecutivo arriba")
         self.high_risks_text.configure(state="disabled")
         
         medium_card = crear_card(results_frame)
@@ -412,9 +414,9 @@ class MainWindow:
             text_color="#f39c12"
         ).pack(anchor="w", padx=15, pady=(10, 5))
         
-        self.medium_risks_text = ctk.CTkTextbox(medium_card, height=120, wrap="word")
+        self.medium_risks_text = ctk.CTkTextbox(medium_card, height=100, wrap="word")
         self.medium_risks_text.pack(fill="x", padx=15, pady=(0, 15))
-        self.medium_risks_text.insert("1.0", "No se han detectado riesgos medios...")
+        self.medium_risks_text.insert("1.0", "Ver detalles en el Resumen Ejecutivo arriba")
         self.medium_risks_text.configure(state="disabled")
         
         low_card = crear_card(results_frame)
@@ -429,7 +431,7 @@ class MainWindow:
         
         self.low_risks_text = ctk.CTkTextbox(low_card, height=100, wrap="word")
         self.low_risks_text.pack(fill="x", padx=15, pady=(0, 15))
-        self.low_risks_text.insert("1.0", "No se han detectado riesgos bajos...")
+        self.low_risks_text.insert("1.0", "Ver detalles en el Resumen Ejecutivo arriba")
         self.low_risks_text.configure(state="disabled")
     
     def _build_footer(self, parent):
@@ -597,6 +599,10 @@ Chunks: {resultado['total_chunks']}"""
         pregunta_lower = pregunta.lower()
         hallazgos = resultado.get("hallazgos", [])
         
+        # Verificar si hay error
+        if hallazgos and hallazgos[0].get("tipo") == "error":
+            return f"Error: {hallazgos[0].get('descripcion', 'Error desconocido')}\n\nRecomendacion: {hallazgos[0].get('recomendacion', '')}"
+        
         if not hallazgos:
             return "No se encontro informacion relevante en el contrato para responder a tu pregunta."
         
@@ -604,39 +610,33 @@ Chunks: {resultado['total_chunks']}"""
         if "penalizacion" in pregunta_lower or "multa" in pregunta_lower or "penalización" in pregunta_lower:
             for h in hallazgos:
                 if "penalizacion" in h.get("tipo", "").lower():
-                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-                    return respuesta
+                    return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
             for h in hallazgos:
                 if "penalización" in h.get("descripcion", "").lower() or "incumplimiento" in h.get("descripcion", "").lower():
-                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-                    return respuesta
+                    return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
         
         # Rescision
         if any(p in pregunta_lower for p in ["rescindir", "terminar", "cancelar", "rescisión", "terminación"]):
             for h in hallazgos:
                 if "rescision" in h.get("tipo", "").lower():
-                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-                    return respuesta
+                    return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
         
         # Fechas
         if any(p in pregunta_lower for p in ["fecha", "vencimiento", "plazo", "comienza", "termina", "inicia", "dura"]):
             for h in hallazgos:
                 if "fecha" in h.get("tipo", "").lower():
-                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}"
-                    return respuesta
+                    return f"Respuesta:\n\n{h.get('descripcion', '')}"
         
         # Pagos
         if any(p in pregunta_lower for p in ["pago", "precio", "costo", "monto", "abonar", "pagar"]):
             for h in hallazgos:
                 if "pago" in h.get("tipo", "").lower():
-                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-                    return respuesta
+                    return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
         
         # Un solo hallazgo
         if len(hallazgos) == 1:
             h = hallazgos[0]
-            respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-            return respuesta
+            return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
         
         # Respuesta general
         respuesta = "Respuesta:\n\n"
@@ -651,6 +651,10 @@ Chunks: {resultado['total_chunks']}"""
         """Extrae un contexto resumido para mostrar."""
         hallazgos = resultado.get("hallazgos", [])
         if not hallazgos:
+            return ""
+        
+        # No mostrar contexto si hay error
+        if hallazgos[0].get("tipo") == "error":
             return ""
         
         contexto = "Contexto utilizado:\n\n"
@@ -716,7 +720,7 @@ Chunks: {resultado['total_chunks']}"""
                         if intento < 2:
                             time.sleep(2 * (intento + 1))
                             continue
-                        respuesta = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
+                        respuesta = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos. Se recomienda cambiar a gemini-2.0-flash en la configuracion."
                     elif "quota" in error.lower() or "exceeded" in error.lower():
                         respuesta = "Cuota de API agotada. Cambia tu API key."
                     else:
@@ -799,7 +803,7 @@ Chunks: {resultado['total_chunks']}"""
                         if intento < 2:
                             time.sleep(2 * (intento + 1))
                             continue
-                        error_msg = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
+                        error_msg = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos. Se recomienda cambiar a gemini-2.0-flash en la configuracion."
                     elif "quota" in error.lower() or "exceeded" in error.lower():
                         error_msg = "Cuota de API agotada. Cambia tu API key."
                     else:
@@ -822,10 +826,34 @@ Chunks: {resultado['total_chunks']}"""
         self.is_analyzing = False
     
     def _show_analysis_results(self, resultado: dict):
-        """Muestra los resultados del analisis sin emojis."""
+        """Muestra los resultados del analisis."""
         
         hallazgos = resultado.get("hallazgos", [])
         
+        # Verificar si hay error
+        hay_error = any(h.get("tipo") == "error" for h in hallazgos)
+        
+        if hay_error:
+            mensaje_error = "ERROR EN EL ANALISIS\n\n"
+            for h in hallazgos:
+                if h.get("tipo") == "error":
+                    mensaje_error += f"{h.get('descripcion', '')}\n"
+                    mensaje_error += f"Recomendacion: {h.get('recomendacion', '')}\n\n"
+            
+            self.summary_text.configure(state="normal")
+            self.summary_text.delete("1.0", "end")
+            self.summary_text.insert("1.0", mensaje_error)
+            self.summary_text.configure(state="disabled")
+            
+            self.status_label.configure(text="Error en analisis")
+            self.btn_analyze.configure(state="normal", text="Iniciar Analisis")
+            self.is_analyzing = False
+            self.analysis_progress.pack_forget()
+            
+            messagebox.showerror("Error de Analisis", mensaje_error)
+            return
+        
+        # Si no hay error, mostrar resultados normales
         altos = []
         medios = []
         bajos = []
@@ -915,14 +943,12 @@ Chunks: {resultado['total_chunks']}"""
             messagebox.showwarning("Sin documento", "Carga un contrato primero")
             return
         
-        # Obtener el resumen del analisis
         resumen = self.summary_text.get("1.0", "end-1c")
         
         if not resumen or resumen == "Los resultados del analisis apareceran aqui...":
             messagebox.showwarning("Sin analisis", "Primero realiza un analisis del contrato")
             return
         
-        # Dialogo para guardar PDF
         archivo = filedialog.asksaveasfilename(
             defaultextension=".pdf",
             title="Guardar Analisis como PDF",
@@ -934,10 +960,8 @@ Chunks: {resultado['total_chunks']}"""
         
         if archivo:
             try:
-                # Crear servicio de exportacion
                 export_service = PDFExportService()
                 
-                # Exportar a PDF
                 pdf_path = export_service.exportar_analisis(
                     resumen=resumen,
                     contrato_nombre=self.current_contract_data['nombre_archivo'],
@@ -989,21 +1013,6 @@ Chunks: {resultado['total_chunks']}"""
         self.summary_text.delete("1.0", "end")
         self.summary_text.insert("1.0", "Los resultados apareceran aqui...")
         self.summary_text.configure(state="disabled")
-        
-        self.high_risks_text.configure(state="normal")
-        self.high_risks_text.delete("1.0", "end")
-        self.high_risks_text.insert("1.0", "No se detectaron riesgos altos...")
-        self.high_risks_text.configure(state="disabled")
-        
-        self.medium_risks_text.configure(state="normal")
-        self.medium_risks_text.delete("1.0", "end")
-        self.medium_risks_text.insert("1.0", "No se detectaron riesgos medios...")
-        self.medium_risks_text.configure(state="disabled")
-        
-        self.low_risks_text.configure(state="normal")
-        self.low_risks_text.delete("1.0", "end")
-        self.low_risks_text.insert("1.0", "No se detectaron riesgos bajos...")
-        self.low_risks_text.configure(state="disabled")
         
         self.question_entry.delete("1.0", "end")
         self.question_entry.insert("1.0", "Ejemplo: Cuales son las penalizaciones?")

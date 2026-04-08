@@ -4,6 +4,8 @@ Define la interfaz comun y funcionalidades compartidas.
 """
 
 import logging
+import json
+import re
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -48,22 +50,16 @@ class Hallazgo:
 class BaseAgent(ABC):
     """
     Clase base abstracta para todos los agentes.
-    
-    Proporciona funcionalidad comun como:
-    - Cliente Gemini para llamadas a LLM
-    - Metodos de formateo de prompts
-    - Parseo de respuestas
     """
     
     def __init__(self, api_key: Optional[str] = None):
-        """
-        Inicializa el agente base.
-        
-        Args:
-            api_key: API key de Gemini (opcional)
-        """
         self.client = GeminiClient(api_key=api_key)
+        self._ultimo_error: Optional[str] = None
         logger.info(f"Inicializando agente: {self.__class__.__name__}")
+    
+    def get_ultimo_error(self) -> Optional[str]:
+        """Retorna el ultimo error ocurrido."""
+        return self._ultimo_error
     
     @abstractmethod
     def analizar(self, texto: str, contexto: Optional[str] = None) -> List[Hallazgo]:
@@ -79,24 +75,45 @@ class BaseAgent(ABC):
         """
         pass
     
-    def _call_llm(self, prompt: str) -> str:
+    def _call_llm(self, prompt: str, modelo: str = "gemini-2.5-flash") -> str:
         """
-        Realiza una llamada al LLM de Gemini.
+        Realiza una llamada al LLM de Gemini con manejo de errores.
         
         Args:
             prompt: Prompt para el LLM
+            modelo: Modelo a usar
             
         Returns:
-            Respuesta del LLM
+            Respuesta del LLM o cadena vacia si hay error
         """
         try:
-            response = self.client.client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt
+            response = self.client.generar_contenido(
+                prompt=prompt,
+                modelo=modelo,
+                max_retries=3,
+                fallback_modelo="gemini-2.0-flash"
             )
-            return response.text
+            
+            if response is None:
+                self._ultimo_error = "El servicio de Gemini no respondio. Intenta de nuevo."
+                logger.error(self._ultimo_error)
+                return ""
+            
+            self._ultimo_error = None
+            return response
+            
         except Exception as e:
-            logger.error(f"Error llamando a Gemini: {e}")
+            error_msg = str(e)
+            if "503" in error_msg or "UNAVAILABLE" in error_msg:
+                self._ultimo_error = "Servicio de Gemini saturado. Espera unos minutos o cambia a gemini-2.0-flash en la configuracion."
+            elif "quota" in error_msg.lower():
+                self._ultimo_error = "Cuota de API agotada. Cambia tu API key."
+            elif "invalid" in error_msg.lower():
+                self._ultimo_error = "API key invalida. Verifica tu configuracion."
+            else:
+                self._ultimo_error = f"Error en Gemini: {error_msg[:100]}"
+            
+            logger.error(f"Error llamando a Gemini: {error_msg}")
             return ""
     
     def _parsear_respuesta_json(self, respuesta: str) -> List[Dict[str, Any]]:
@@ -109,11 +126,10 @@ class BaseAgent(ABC):
         Returns:
             Lista de diccionarios con los hallazgos
         """
-        import json
-        import re
+        if not respuesta:
+            return []
         
         try:
-            # Intentar extraer JSON de la respuesta
             json_match = re.search(r'\[.*\]', respuesta, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group())

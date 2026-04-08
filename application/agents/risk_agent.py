@@ -91,6 +91,11 @@ class RiskDetectionAgent(BaseAgent):
         """
         
         respuesta = self._call_llm(prompt)
+        
+        if not respuesta:
+            logger.warning(f"RiskDetectionAgent: {self._ultimo_error}")
+            return []
+        
         datos = self._parsear_respuesta_json(respuesta)
         
         hallazgos = []
