@@ -362,77 +362,24 @@ class MainWindow:
         self.analysis_progress.pack_forget()
     
     def _build_results_tab(self, parent):
-        """Construye la pestaña de resultados."""
+        """Construye la pestaña de resultados - SOLO resumen ejecutivo."""
         results_frame = ctk.CTkScrollableFrame(parent)
         results_frame.pack(fill="both", expand=True)
         
-        self.results_title = ctk.CTkLabel(
-            results_frame,
-            text="Resultados del Analisis",
+        # Un solo card para todos los resultados
+        main_card = crear_card(results_frame)
+        main_card.pack(fill="x", pady=(0, 15))
+        
+        ctk.CTkLabel(
+            main_card,
+            text="RESULTADOS DEL ANALISIS",
             font=ctk.CTkFont(size=16, weight="bold")
-        )
-        self.results_title.pack(anchor="w", pady=(10, 10))
+        ).pack(anchor="w", padx=15, pady=(15, 10))
         
-        summary_card = crear_card(results_frame)
-        summary_card.pack(fill="x", pady=(0, 15))
-        
-        ctk.CTkLabel(
-            summary_card,
-            text="Resumen Ejecutivo",
-            font=ctk.CTkFont(size=14, weight="bold")
-        ).pack(anchor="w", padx=15, pady=(10, 5))
-        
-        self.summary_text = ctk.CTkTextbox(summary_card, height=400, wrap="word")
-        self.summary_text.pack(fill="x", padx=15, pady=(0, 15))
-        self.summary_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
+        self.summary_text = ctk.CTkTextbox(main_card, wrap="word", height=500)
+        self.summary_text.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        self.summary_text.insert("1.0", "Los resultados completos del analisis apareceran aqui...")
         self.summary_text.configure(state="disabled")
-        
-        # Nota: Las secciones separadas se mantienen pero se muestran mensajes
-        # indicando que los resultados estan en el resumen
-        high_card = crear_card(results_frame)
-        high_card.pack(fill="x", pady=(0, 15))
-        
-        ctk.CTkLabel(
-            high_card,
-            text="RIESGOS ALTOS",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#e74c3c"
-        ).pack(anchor="w", padx=15, pady=(10, 5))
-        
-        self.high_risks_text = ctk.CTkTextbox(high_card, height=100, wrap="word")
-        self.high_risks_text.pack(fill="x", padx=15, pady=(0, 15))
-        self.high_risks_text.insert("1.0", "Ver detalles en el Resumen Ejecutivo arriba")
-        self.high_risks_text.configure(state="disabled")
-        
-        medium_card = crear_card(results_frame)
-        medium_card.pack(fill="x", pady=(0, 15))
-        
-        ctk.CTkLabel(
-            medium_card,
-            text="RIESGOS MEDIOS",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#f39c12"
-        ).pack(anchor="w", padx=15, pady=(10, 5))
-        
-        self.medium_risks_text = ctk.CTkTextbox(medium_card, height=100, wrap="word")
-        self.medium_risks_text.pack(fill="x", padx=15, pady=(0, 15))
-        self.medium_risks_text.insert("1.0", "Ver detalles en el Resumen Ejecutivo arriba")
-        self.medium_risks_text.configure(state="disabled")
-        
-        low_card = crear_card(results_frame)
-        low_card.pack(fill="x", pady=(0, 15))
-        
-        ctk.CTkLabel(
-            low_card,
-            text="RIESGOS BAJOS",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#2ecc71"
-        ).pack(anchor="w", padx=15, pady=(10, 5))
-        
-        self.low_risks_text = ctk.CTkTextbox(low_card, height=100, wrap="word")
-        self.low_risks_text.pack(fill="x", padx=15, pady=(0, 15))
-        self.low_risks_text.insert("1.0", "Ver detalles en el Resumen Ejecutivo arriba")
-        self.low_risks_text.configure(state="disabled")
     
     def _build_footer(self, parent):
         """Construye el footer."""
@@ -469,20 +416,14 @@ class MainWindow:
         self.btn_export.pack(side="left", padx=(10, 0))
     
     def _cambiar_api_key(self):
-        """Cambia la API key."""
-        dialog = ctk.CTkInputDialog(
-            text="Ingresa tu nueva API key de Gemini:",
-            title="Cambiar API Key"
-        )
+        """Abre la ventana de configuracion completa para cambiar API key y modelos."""
+        # Cerrar ventana actual
+        self.root.destroy()
         
-        nueva_api_key = dialog.get_input()
-        if nueva_api_key and nueva_api_key.strip():
-            if self.config_service.actualizar_api_key(nueva_api_key.strip()):
-                messagebox.showinfo("Exito", "API key actualizada. La app se reiniciara.")
-                self.root.destroy()
-                os.startfile(sys.argv[0])
-            else:
-                messagebox.showerror("Error", "No se pudo guardar la API key")
+        # Abrir ventana de configuracion
+        from interface.tkinter.config_window import ConfigWindow
+        config = ConfigWindow()
+        config.run()
     
     def _on_file_selected(self, pdf_path: Path):
         """Maneja seleccion de archivo."""
@@ -599,7 +540,6 @@ Chunks: {resultado['total_chunks']}"""
         pregunta_lower = pregunta.lower()
         hallazgos = resultado.get("hallazgos", [])
         
-        # Verificar si hay error
         if hallazgos and hallazgos[0].get("tipo") == "error":
             return f"Error: {hallazgos[0].get('descripcion', 'Error desconocido')}\n\nRecomendacion: {hallazgos[0].get('recomendacion', '')}"
         
@@ -653,7 +593,6 @@ Chunks: {resultado['total_chunks']}"""
         if not hallazgos:
             return ""
         
-        # No mostrar contexto si hay error
         if hallazgos[0].get("tipo") == "error":
             return ""
         
@@ -830,7 +769,6 @@ Chunks: {resultado['total_chunks']}"""
         
         hallazgos = resultado.get("hallazgos", [])
         
-        # Verificar si hay error
         hay_error = any(h.get("tipo") == "error" for h in hallazgos)
         
         if hay_error:
@@ -853,7 +791,6 @@ Chunks: {resultado['total_chunks']}"""
             messagebox.showerror("Error de Analisis", mensaje_error)
             return
         
-        # Si no hay error, mostrar resultados normales
         altos = []
         medios = []
         bajos = []
