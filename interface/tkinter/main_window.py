@@ -18,7 +18,7 @@ from application.services.processing_service import ProcessingService
 from application.services.config_service import ConfigService
 from application.services.rag_service import RAGService
 from application.graph.workflow import AnalisisWorkflow
-
+from application.services.pdf_export_service import PDFExportService
 logger = logging.getLogger(__name__)
 
 
@@ -575,9 +575,9 @@ class MainWindow:
         self.info_text.configure(state="normal")
         self.info_text.delete("1.0", "end")
         info = f"""Nombre: {resultado['nombre_archivo']}
-Paginas: {resultado['total_paginas']}
-Caracteres: {resultado['total_caracteres']:,}
-Chunks: {resultado['total_chunks']}"""
+                Paginas: {resultado['total_paginas']}
+                Caracteres: {resultado['total_caracteres']:,}
+                Chunks: {resultado['total_chunks']}"""
         self.info_text.insert("1.0", info)
         self.info_text.configure(state="disabled")
     
@@ -592,54 +592,60 @@ Chunks: {resultado['total_chunks']}"""
         self.stats_label.configure(text=f"Total: {resultado['total_caracteres']} caracteres | {resultado['total_chunks']} chunks")
     
     def _generar_respuesta_especifica(self, pregunta: str, resultado: dict) -> str:
-        """Genera una respuesta especifica y CONCRETA para la pregunta del usuario."""
+        """Genera una respuesta especifica sin emojis ni formato."""
         pregunta_lower = pregunta.lower()
         hallazgos = resultado.get("hallazgos", [])
         
         if not hallazgos:
-            return "No se encontró información relevante en el contrato para responder a tu pregunta."
+            return "No se encontro informacion relevante en el contrato para responder a tu pregunta."
         
         # Penalizaciones
         if "penalizacion" in pregunta_lower or "multa" in pregunta_lower or "penalización" in pregunta_lower:
             for h in hallazgos:
                 if "penalizacion" in h.get("tipo", "").lower():
-                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
+                    return respuesta
             for h in hallazgos:
                 if "penalización" in h.get("descripcion", "").lower() or "incumplimiento" in h.get("descripcion", "").lower():
-                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
+                    return respuesta
         
-        # Rescisión
+        # Rescision
         if any(p in pregunta_lower for p in ["rescindir", "terminar", "cancelar", "rescisión", "terminación"]):
             for h in hallazgos:
                 if "rescision" in h.get("tipo", "").lower():
-                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
+                    return respuesta
         
         # Fechas
         if any(p in pregunta_lower for p in ["fecha", "vencimiento", "plazo", "comienza", "termina", "inicia", "dura"]):
             for h in hallazgos:
                 if "fecha" in h.get("tipo", "").lower():
-                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}"
+                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}"
+                    return respuesta
         
         # Pagos
         if any(p in pregunta_lower for p in ["pago", "precio", "costo", "monto", "abonar", "pagar"]):
             for h in hallazgos:
                 if "pago" in h.get("tipo", "").lower():
-                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+                    respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
+                    return respuesta
         
         # Un solo hallazgo
         if len(hallazgos) == 1:
             h = hallazgos[0]
-            return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+            respuesta = f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
+            return respuesta
         
-        # Respuesta general con los principales hallazgos
-        respuesta = "📌 **Respuesta:**\n\n"
+        # Respuesta general
+        respuesta = "Respuesta:\n\n"
         for i, h in enumerate(hallazgos[:3], 1):
             respuesta += f"{i}. {h.get('descripcion', '')}\n"
             if h.get('recomendacion'):
-                respuesta += f"   💡 {h.get('recomendacion', '')}\n\n"
+                respuesta += f"   Recomendacion: {h.get('recomendacion', '')}\n\n"
         
-        return respuesta if len(respuesta) > 20 else "No se encontró información específica para tu pregunta."
-    
+        return respuesta if len(respuesta) > 20 else "No se encontro informacion especifica para tu pregunta."
+
     def _extraer_contexto_resumido(self, resultado: dict) -> str:
         """Extrae un contexto resumido para mostrar."""
         hallazgos = resultado.get("hallazgos", [])
@@ -815,11 +821,7 @@ Chunks: {resultado['total_chunks']}"""
         self.is_analyzing = False
     
     def _show_analysis_results(self, resultado: dict):
-        """Muestra los resultados del analisis."""
-        self.summary_text.configure(state="normal")
-        self.summary_text.delete("1.0", "end")
-        self.summary_text.insert("1.0", resultado.get("resumen", "No se genero resumen"))
-        self.summary_text.configure(state="disabled")
+        """Muestra los resultados del analisis sin emojis."""
         
         hallazgos = resultado.get("hallazgos", [])
         
@@ -829,14 +831,11 @@ Chunks: {resultado['total_chunks']}"""
         
         for h in hallazgos:
             riesgo = h.get("riesgo", "MEDIO")
-            texto = f"• {h.get('descripcion', '')}\n"
-            if h.get('texto_relevante'):
-                texto += f"  📍 {h.get('texto_relevante', '')[:150]}...\n"
-            if h.get('recomendacion'):
-                texto += f"  💡 {h.get('recomendacion', '')}\n\n"
-            else:
-                texto += "\n"
-            
+            texto = f"""* {h.get('descripcion', '')}
+                    Texto: "{h.get('texto_relevante', '')}"
+                    Recomendacion: {h.get('recomendacion', '')}
+
+    """
             if riesgo == "ALTO":
                 altos.append(texto)
             elif riesgo == "MEDIO":
@@ -844,25 +843,45 @@ Chunks: {resultado['total_chunks']}"""
             else:
                 bajos.append(texto)
         
-        self.high_risks_text.configure(state="normal")
-        self.high_risks_text.delete("1.0", "end")
-        self.high_risks_text.insert("1.0", "".join(altos) if altos else "✅ No se detectaron riesgos altos")
-        self.high_risks_text.configure(state="disabled")
+        resumen_completo = []
+        resumen_completo.append("=" * 60)
+        resumen_completo.append("RESULTADOS DEL ANALISIS LEGAL")
+        resumen_completo.append("=" * 60)
+        resumen_completo.append(f"\nAgente utilizado: {resultado.get('agente_usado', 'desconocido')}")
         
-        self.medium_risks_text.configure(state="normal")
-        self.medium_risks_text.delete("1.0", "end")
-        self.medium_risks_text.insert("1.0", "".join(medios) if medios else "✅ No se detectaron riesgos medios")
-        self.medium_risks_text.configure(state="disabled")
+        resumen_completo.append(f"\n{'=' * 60}")
+        resumen_completo.append(f"RIESGOS ALTOS ({len(altos)})")
+        resumen_completo.append("=" * 60)
+        if altos:
+            resumen_completo.extend(altos)
+        else:
+            resumen_completo.append("No se detectaron riesgos altos\n")
         
-        self.low_risks_text.configure(state="normal")
-        self.low_risks_text.delete("1.0", "end")
-        self.low_risks_text.insert("1.0", "".join(bajos) if bajos else "✅ No se detectaron riesgos bajos")
-        self.low_risks_text.configure(state="disabled")
+        resumen_completo.append(f"\n{'=' * 60}")
+        resumen_completo.append(f"RIESGOS MEDIOS ({len(medios)})")
+        resumen_completo.append("=" * 60)
+        if medios:
+            resumen_completo.extend(medios)
+        else:
+            resumen_completo.append("No se detectaron riesgos medios\n")
+        
+        resumen_completo.append(f"\n{'=' * 60}")
+        resumen_completo.append(f"RIESGOS BAJOS / INFORMATIVOS ({len(bajos)})")
+        resumen_completo.append("=" * 60)
+        if bajos:
+            resumen_completo.extend(bajos)
+        else:
+            resumen_completo.append("No se detectaron riesgos bajos\n")
+        
+        self.summary_text.configure(state="normal")
+        self.summary_text.delete("1.0", "end")
+        self.summary_text.insert("1.0", "\n".join(resumen_completo))
+        self.summary_text.configure(state="disabled")
         
         self.btn_export.configure(state="normal")
-        self.status_label.configure(text="✅ Analisis completado")
+        self.status_label.configure(text="Analisis completado")
         
-        self.btn_analyze.configure(state="normal", text="🚀 Iniciar Analisis")
+        self.btn_analyze.configure(state="normal", text="Iniciar Analisis")
         self.is_analyzing = False
         self.analysis_progress.pack_forget()
         
@@ -871,10 +890,11 @@ Chunks: {resultado['total_chunks']}"""
         bajos_count = len(bajos)
         
         messagebox.showinfo("Analisis Completado", 
-                           f"Analisis finalizado.\n\n"
-                           f"Riesgos Altos: {altos_count}\n"
-                           f"Riesgos Medios: {medios_count}\n"
-                           f"Riesgos Bajos: {bajos_count}")
+                        f"Analisis finalizado.\n\n"
+                        f"Riesgos Altos: {altos_count}\n"
+                        f"Riesgos Medios: {medios_count}\n"
+                        f"Riesgos Bajos: {bajos_count}\n\n"
+                        f"Los detalles completos estan en la pestaña de Resultados.")
     
     def _show_analysis_error(self, error: str):
         """Muestra error en el analisis."""
@@ -889,38 +909,49 @@ Chunks: {resultado['total_chunks']}"""
         self.status_label.configure(text="❌ Error en analisis")
     
     def _export_analysis(self):
-        """Exporta el analisis."""
-        resumen = self.summary_text.get("1.0", "end-1c")
-        altos = self.high_risks_text.get("1.0", "end-1c")
-        medios = self.medium_risks_text.get("1.0", "end-1c")
-        bajos = self.low_risks_text.get("1.0", "end-1c")
+        """Exporta el analisis a PDF."""
+        if not self.current_contract_data:
+            messagebox.showwarning("Sin documento", "Carga un contrato primero")
+            return
         
+        # Obtener el resumen del analisis
+        resumen = self.summary_text.get("1.0", "end-1c")
+        
+        if not resumen or resumen == "Los resultados del analisis apareceran aqui...":
+            messagebox.showwarning("Sin analisis", "Primero realiza un analisis del contrato")
+            return
+        
+        
+        
+        # Dialogo para guardar PDF
         archivo = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Archivos de texto", "*.txt"), ("Todos", "*.*")]
+            defaultextension=".pdf",
+            filetypes=[
+                ("Documento PDF", "*.pdf"),
+                ("Todos los archivos", "*.*")
+            ]
         )
         
         if archivo:
             try:
-                with open(archivo, 'w', encoding='utf-8') as f:
-                    f.write("=" * 60 + "\n")
-                    f.write("CONTRACT ANALYZER PRO - ANALISIS LEGAL\n")
-                    f.write("=" * 60 + "\n\n")
-                    f.write("RESUMEN EJECUTIVO\n")
-                    f.write("-" * 40 + "\n")
-                    f.write(resumen + "\n\n")
-                    f.write("RIESGOS ALTOS\n")
-                    f.write("-" * 40 + "\n")
-                    f.write(altos + "\n\n")
-                    f.write("RIESGOS MEDIOS\n")
-                    f.write("-" * 40 + "\n")
-                    f.write(medios + "\n\n")
-                    f.write("RIESGOS BAJOS\n")
-                    f.write("-" * 40 + "\n")
-                    f.write(bajos + "\n")
-                messagebox.showinfo("Exito", f"Analisis exportado a:\n{archivo}")
+                # Crear servicio de exportacion
+                export_service = PDFExportService()
+                
+                # Exportar a PDF
+                pdf_path = export_service.exportar_analisis(
+                    resumen=resumen,
+                    contrato_nombre=self.current_contract_data['nombre_archivo'],
+                    archivo_salida=Path(archivo)
+                )
+                
+                messagebox.showinfo(
+                    "Exportacion Exitosa", 
+                    f"Analisis exportado a PDF:\n\n{pdf_path}\n\n"
+                    "El archivo se ha guardado correctamente."
+                )
             except Exception as e:
-                messagebox.showerror("Error", str(e))
+                logger.error(f"Error exportando a PDF: {e}")
+                messagebox.showerror("Error", f"No se pudo exportar el analisis:\n\n{e}")
     
     def _on_clear(self):
         """Limpia el contrato actual."""
