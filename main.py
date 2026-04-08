@@ -15,13 +15,11 @@ from application.services.config_service import ConfigService
 def main():
     """Funcion principal de la aplicacion."""
     print("""
-    ╔══════════════════════════════════════════════════════════════╗
-    ║                                                              ║
-    ║     C O N T R A C T   A N A L Y Z E R   P R O               ║
-    ║     Sistema de Analisis Legal Inteligente                   ║
-    ║     Version 1.0 - 2026                                      ║
-    ║                                                              ║
-    ╚══════════════════════════════════════════════════════════════╝
+    ============================================================
+    CONTRACT ANALYZER PRO
+    Sistema de Analisis Legal Inteligente
+    Version 1.0 - 2026
+    ============================================================
     """)
     
     try:
@@ -36,16 +34,19 @@ def main():
         else:
             print("[INFO] Primera ejecucion. Abriendo configuracion...")
             from interface.tkinter.config_window import ConfigWindow
-            app = ConfigWindow()
+            app = ConfigWindow()  # Sin parent = modo independiente
             app.run()
             
     except KeyboardInterrupt:
         print("\n[INFO] Aplicacion cerrada por el usuario")
         sys.exit(0)
-    except Exception as e:
-        print(f"\n[ERROR] Error al iniciar la aplicacion: {e}")
+    except ImportError as e:
+        print(f"\n[ERROR] Error de importacion: {e}")
         print("[INFO] Verifica que todas las dependencias esten instaladas")
         print("      pip install -r requirements.txt")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n[ERROR] Error al iniciar la aplicacion: {e}")
         sys.exit(1)
 
 

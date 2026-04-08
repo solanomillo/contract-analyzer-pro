@@ -19,7 +19,8 @@ from application.services.config_service import ConfigService
 from application.services.rag_service import RAGService
 from application.graph.workflow import AnalisisWorkflow
 from application.services.pdf_export_service import PDFExportService
-
+from interface.tkinter.config_window import ConfigWindow
+from application.graph.workflow import AnalisisWorkflow
 logger = logging.getLogger(__name__)
 
 
@@ -416,13 +417,17 @@ class MainWindow:
         self.btn_export.pack(side="left", padx=(10, 0))
     
     def _cambiar_api_key(self):
-        """Abre la ventana de configuracion completa para cambiar API key y modelos."""
-        # Cerrar ventana actual
-        self.root.destroy()
+        """Abre ventana modal de configuracion (no cierra la app)."""        
         
-        # Abrir ventana de configuracion
-        from interface.tkinter.config_window import ConfigWindow
-        config = ConfigWindow()
+        def on_config_saved():
+            """Callback cuando se guarda la configuracion."""
+            # Recargar workflow con nueva configuracion            
+            api_key = self.config_service.get_api_key()
+            self.workflow = AnalisisWorkflow(api_key=api_key)
+            self.status_label.configure(text="Configuracion actualizada")
+            messagebox.showinfo("Exito", "Configuracion actualizada. Los nuevos analisis usaran los modelos seleccionados.")
+        
+        config = ConfigWindow(parent=self.root, on_config_saved=on_config_saved)
         config.run()
     
     def _on_file_selected(self, pdf_path: Path):
