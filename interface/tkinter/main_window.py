@@ -19,6 +19,7 @@ from application.services.config_service import ConfigService
 from application.services.rag_service import RAGService
 from application.graph.workflow import AnalisisWorkflow
 from application.services.pdf_export_service import PDFExportService
+
 logger = logging.getLogger(__name__)
 
 
@@ -140,7 +141,7 @@ class MainWindow:
         
         self.btn_cambiar_api = ctk.CTkButton(
             header_buttons,
-            text="🔑 Cambiar API Key",
+            text="Cambiar API Key",
             command=self._cambiar_api_key,
             width=140,
             height=30,
@@ -151,7 +152,7 @@ class MainWindow:
         
         self.status_label = ctk.CTkLabel(
             header_buttons,
-            text="✅ Sistema listo",
+            text="Sistema listo",
             font=ctk.CTkFont(size=12),
             text_color="#2ecc71"
         )
@@ -164,7 +165,7 @@ class MainWindow:
         
         ctk.CTkLabel(
             upload_card,
-            text="📁 Cargar Contrato",
+            text="Cargar Contrato",
             font=ctk.CTkFont(size=16, weight="bold")
         ).pack(anchor="w", padx=20, pady=(20, 10))
         
@@ -183,7 +184,7 @@ class MainWindow:
         
         ctk.CTkLabel(
             info_card,
-            text="📋 Informacion del Contrato",
+            text="Informacion del Contrato",
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(anchor="w", padx=20, pady=(15, 10))
         
@@ -200,16 +201,16 @@ class MainWindow:
         tabview = ctk.CTkTabview(preview_card)
         tabview.pack(fill="both", expand=True, padx=20, pady=20)
         
-        tab_texto = tabview.add("📄 Texto del Contrato")
+        tab_texto = tabview.add("Texto del Contrato")
         self._build_text_tab(tab_texto)
         
-        tab_preguntas = tabview.add("❓ Preguntar al Contrato")
+        tab_preguntas = tabview.add("Preguntar al Contrato")
         self._build_qa_tab(tab_preguntas)
         
-        tab_analisis = tabview.add("📊 Analisis Legal")
+        tab_analisis = tabview.add("Analisis Legal")
         self._build_analysis_tab(tab_analisis)
         
-        tab_resultados = tabview.add("📋 Resultados")
+        tab_resultados = tabview.add("Resultados")
         self._build_results_tab(tab_resultados)
     
     def _build_text_tab(self, parent):
@@ -253,7 +254,7 @@ class MainWindow:
         
         self.btn_ask = ctk.CTkButton(
             btn_frame,
-            text="🔍 Preguntar",
+            text="Preguntar",
             command=self._ask_question,
             width=150,
             state="disabled"
@@ -346,7 +347,7 @@ class MainWindow:
         
         self.btn_analyze = ctk.CTkButton(
             btn_analysis_frame,
-            text="🚀 Iniciar Analisis",
+            text="Iniciar Analisis",
             command=self._start_analysis,
             width=200,
             height=40,
@@ -377,11 +378,11 @@ class MainWindow:
         
         ctk.CTkLabel(
             summary_card,
-            text="📊 Resumen Ejecutivo",
+            text="Resumen Ejecutivo",
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(anchor="w", padx=15, pady=(10, 5))
         
-        self.summary_text = ctk.CTkTextbox(summary_card, height=150, wrap="word")
+        self.summary_text = ctk.CTkTextbox(summary_card, height=300, wrap="word")
         self.summary_text.pack(fill="x", padx=15, pady=(0, 15))
         self.summary_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
         self.summary_text.configure(state="disabled")
@@ -391,7 +392,7 @@ class MainWindow:
         
         ctk.CTkLabel(
             high_card,
-            text="🔴 RIESGOS ALTOS",
+            text="RIESGOS ALTOS",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color="#e74c3c"
         ).pack(anchor="w", padx=15, pady=(10, 5))
@@ -406,7 +407,7 @@ class MainWindow:
         
         ctk.CTkLabel(
             medium_card,
-            text="🟡 RIESGOS MEDIOS",
+            text="RIESGOS MEDIOS",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color="#f39c12"
         ).pack(anchor="w", padx=15, pady=(10, 5))
@@ -421,7 +422,7 @@ class MainWindow:
         
         ctk.CTkLabel(
             low_card,
-            text="🟢 RIESGOS BAJOS",
+            text="RIESGOS BAJOS",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color="#2ecc71"
         ).pack(anchor="w", padx=15, pady=(10, 5))
@@ -444,7 +445,7 @@ class MainWindow:
         
         self.btn_clear = ctk.CTkButton(
             buttons_frame,
-            text="🗑️ Limpiar Contrato",
+            text="Limpiar Contrato",
             command=self._on_clear,
             width=150,
             height=40,
@@ -455,7 +456,7 @@ class MainWindow:
         
         self.btn_export = ctk.CTkButton(
             buttons_frame,
-            text="📎 Exportar Analisis",
+            text="Exportar Analisis",
             command=self._export_analysis,
             width=150,
             height=40,
@@ -523,7 +524,7 @@ class MainWindow:
     
     def _update_progress(self, mensaje: str):
         self.progress_card.update_progress(0.5, mensaje, "")
-        self.status_label.configure(text=f"🔄 {mensaje}")
+        self.status_label.configure(text=f"Procesando: {mensaje}")
     
     def _on_process_complete(self, resultado: dict):
         self.current_contract_data = resultado
@@ -533,22 +534,22 @@ class MainWindow:
         self.progress_card.update_progress(1.0, "Indexando...", "")
         
         try:
-            self.status_label.configure(text="🔄 Indexando...")
+            self.status_label.configure(text="Indexando...")
             index_result = self.rag_service.index_contract(resultado)
             
             if index_result.get("estado") == "exito":
                 self.progress_card.update_progress(1.0, "Completado!", 
                                                    f"Indexados {index_result['chunks_indexados']} chunks")
-                self.status_label.configure(text="✅ Documento procesado")
+                self.status_label.configure(text="Documento procesado")
                 
                 self.btn_ask.configure(state="normal")
                 self.btn_analyze.configure(state="normal")
                 self.btn_export.configure(state="normal")
             else:
-                self.status_label.configure(text="⚠️ Indexacion fallida")
+                self.status_label.configure(text="Indexacion fallida")
         except Exception as e:
             logger.error(f"Error en indexacion: {e}")
-            self.status_label.configure(text="❌ Error en indexacion")
+            self.status_label.configure(text="Error en indexacion")
         
         self._update_contract_info(resultado)
         self._update_preview(resultado)
@@ -558,12 +559,12 @@ class MainWindow:
         self.is_processing = False
         self.file_upload.set_loading(False)
         self.progress_card.hide()
-        self.status_label.configure(text="❌ Error")
+        self.status_label.configure(text="Error")
         
         if "503" in error or "UNAVAILABLE" in error or "high demand" in error.lower():
             messagebox.showerror(
                 "Servicio No Disponible",
-                "El servicio de Gemini está con alta demanda.\n\n"
+                "El servicio de Gemini esta con alta demanda.\n\n"
                 "Sugerencias:\n"
                 "1. Espera unos minutos\n"
                 "2. Cambia el modelo en .env a: GEMINI_MODEL=gemini-2.0-flash"
@@ -575,9 +576,9 @@ class MainWindow:
         self.info_text.configure(state="normal")
         self.info_text.delete("1.0", "end")
         info = f"""Nombre: {resultado['nombre_archivo']}
-                Paginas: {resultado['total_paginas']}
-                Caracteres: {resultado['total_caracteres']:,}
-                Chunks: {resultado['total_chunks']}"""
+Paginas: {resultado['total_paginas']}
+Caracteres: {resultado['total_caracteres']:,}
+Chunks: {resultado['total_chunks']}"""
         self.info_text.insert("1.0", info)
         self.info_text.configure(state="disabled")
     
@@ -652,7 +653,7 @@ class MainWindow:
         if not hallazgos:
             return ""
         
-        contexto = "**Contexto utilizado:**\n\n"
+        contexto = "Contexto utilizado:\n\n"
         for i, h in enumerate(hallazgos[:2], 1):
             texto = h.get('texto_relevante', '')[:200]
             if texto:
@@ -663,22 +664,22 @@ class MainWindow:
     def _ask_question(self):
         """Realiza una pregunta sobre el contrato."""
         if not self.current_contract_data:
-            messagebox.showwarning("⚠️", "📄 Primero carga un contrato")
+            messagebox.showwarning("Advertencia", "Primero carga un contrato")
             return
 
         if self.is_answering:
-            messagebox.showwarning("⏳", "⚠️ Espera...")
+            messagebox.showwarning("En proceso", "Espera a que termine la respuesta actual")
             return
 
         pregunta = self.question_entry.get("1.0", "end-1c").strip()
 
         if not pregunta:
-            messagebox.showwarning("⚠️", "❓ Escribe una pregunta")
+            messagebox.showwarning("Advertencia", "Escribe una pregunta")
             return
 
         self.is_answering = True
-        self.btn_ask.configure(state="disabled", text="⏳ Procesando...")
-        self.status_label.configure(text="🔍 Buscando...")
+        self.btn_ask.configure(state="disabled", text="Procesando...")
+        self.status_label.configure(text="Buscando...")
         
         self.qa_progress.pack(side="left", padx=(10, 0))
         self.qa_progress.set(0.2)
@@ -691,7 +692,7 @@ class MainWindow:
 
                     self.root.after(0, lambda: self.qa_progress.set(0.5))
                     self.root.after(0, lambda: self.status_label.configure(
-                        text=f"🔄 Procesando (intento {intento+1}/3)..."
+                        text=f"Procesando pregunta (intento {intento+1}/3)..."
                     ))
 
                     resultado = self.workflow.ejecutar_sync(
@@ -715,11 +716,11 @@ class MainWindow:
                         if intento < 2:
                             time.sleep(2 * (intento + 1))
                             continue
-                        respuesta = "⚠️ Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
+                        respuesta = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
                     elif "quota" in error.lower() or "exceeded" in error.lower():
-                        respuesta = "⚠️ Cuota de API agotada. Cambia tu API key."
+                        respuesta = "Cuota de API agotada. Cambia tu API key."
                     else:
-                        respuesta = f"❌ Error: {error[:200]}"
+                        respuesta = f"Error: {error[:200]}"
 
                     self.root.after(0, lambda: self._show_answer(respuesta, ""))
                     return
@@ -733,8 +734,8 @@ class MainWindow:
     
     def _reset_ask_button(self):
         """Resetea el boton de preguntar."""
-        self.btn_ask.configure(state="normal", text="🔍 Preguntar")
-        self.status_label.configure(text="✅ Listo")
+        self.btn_ask.configure(state="normal", text="Preguntar")
+        self.status_label.configure(text="Listo")
         self.is_answering = False
     
     def _show_answer(self, respuesta: str, contexto: str):
@@ -750,20 +751,20 @@ class MainWindow:
             self.context_text.insert("1.0", contexto)
             self.context_text.configure(state="disabled")
 
-        self.btn_ask.configure(state="normal", text="🔍 Preguntar")
-        self.status_label.configure(text="✅ Listo")
+        self.btn_ask.configure(state="normal", text="Preguntar")
+        self.status_label.configure(text="Listo")
         self.is_answering = False
         self.qa_progress.pack_forget()
     
     def _start_analysis(self):
         """Inicia el analisis legal."""
         if not self.current_contract_data:
-            messagebox.showwarning("⚠️", "📄 Carga un contrato")
+            messagebox.showwarning("Advertencia", "Carga un contrato primero")
             return
 
         self.is_analyzing = True
-        self.btn_analyze.configure(state="disabled", text="⏳ Analizando...")
-        self.status_label.configure(text="🔍 Analizando contrato...")
+        self.btn_analyze.configure(state="disabled", text="Analizando...")
+        self.status_label.configure(text="Analizando contrato...")
         
         self.analysis_progress.pack(side="left", padx=(10, 0))
         self.analysis_progress.set(0.2)
@@ -776,7 +777,7 @@ class MainWindow:
 
                     self.root.after(0, lambda: self.analysis_progress.set(0.5))
                     self.root.after(0, lambda: self.status_label.configure(
-                        text=f"🔄 Analizando (intento {intento+1}/3)..."
+                        text=f"Analizando contrato (intento {intento+1}/3)..."
                     ))
 
                     resultado = self.workflow.ejecutar_sync(
@@ -798,11 +799,11 @@ class MainWindow:
                         if intento < 2:
                             time.sleep(2 * (intento + 1))
                             continue
-                        error_msg = "⚠️ Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
+                        error_msg = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
                     elif "quota" in error.lower() or "exceeded" in error.lower():
-                        error_msg = "⚠️ Cuota de API agotada. Cambia tu API key."
+                        error_msg = "Cuota de API agotada. Cambia tu API key."
                     else:
-                        error_msg = f"❌ Error: {error[:200]}"
+                        error_msg = f"Error: {error[:200]}"
 
                     self.root.after(0, lambda: self._show_analysis_error(error_msg))
                     return
@@ -816,8 +817,8 @@ class MainWindow:
     
     def _reset_analyze_button(self):
         """Resetea el boton de analizar."""
-        self.btn_analyze.configure(state="normal", text="🚀 Iniciar Analisis")
-        self.status_label.configure(text="✅ Listo")
+        self.btn_analyze.configure(state="normal", text="Iniciar Analisis")
+        self.status_label.configure(text="Listo")
         self.is_analyzing = False
     
     def _show_analysis_results(self, resultado: dict):
@@ -832,10 +833,10 @@ class MainWindow:
         for h in hallazgos:
             riesgo = h.get("riesgo", "MEDIO")
             texto = f"""* {h.get('descripcion', '')}
-                    Texto: "{h.get('texto_relevante', '')}"
-                    Recomendacion: {h.get('recomendacion', '')}
+  Texto: "{h.get('texto_relevante', '')}"
+  Recomendacion: {h.get('recomendacion', '')}
 
-    """
+"""
             if riesgo == "ALTO":
                 altos.append(texto)
             elif riesgo == "MEDIO":
@@ -890,23 +891,23 @@ class MainWindow:
         bajos_count = len(bajos)
         
         messagebox.showinfo("Analisis Completado", 
-                        f"Analisis finalizado.\n\n"
-                        f"Riesgos Altos: {altos_count}\n"
-                        f"Riesgos Medios: {medios_count}\n"
-                        f"Riesgos Bajos: {bajos_count}\n\n"
-                        f"Los detalles completos estan en la pestaña de Resultados.")
+                           f"Analisis finalizado.\n\n"
+                           f"Riesgos Altos: {altos_count}\n"
+                           f"Riesgos Medios: {medios_count}\n"
+                           f"Riesgos Bajos: {bajos_count}\n\n"
+                           f"Los detalles completos estan en la pestaña de Resultados.")
     
     def _show_analysis_error(self, error: str):
         """Muestra error en el analisis."""
         self.summary_text.configure(state="normal")
         self.summary_text.delete("1.0", "end")
-        self.summary_text.insert("1.0", f"❌ Error en el analisis:\n\n{error}")
+        self.summary_text.insert("1.0", f"Error en el analisis:\n\n{error}")
         self.summary_text.configure(state="disabled")
         
-        self.btn_analyze.configure(state="normal", text="🚀 Iniciar Analisis")
+        self.btn_analyze.configure(state="normal", text="Iniciar Analisis")
         self.is_analyzing = False
         self.analysis_progress.pack_forget()
-        self.status_label.configure(text="❌ Error en analisis")
+        self.status_label.configure(text="Error en analisis")
     
     def _export_analysis(self):
         """Exporta el analisis a PDF."""
@@ -921,11 +922,10 @@ class MainWindow:
             messagebox.showwarning("Sin analisis", "Primero realiza un analisis del contrato")
             return
         
-        
-        
         # Dialogo para guardar PDF
         archivo = filedialog.asksaveasfilename(
             defaultextension=".pdf",
+            title="Guardar Analisis como PDF",
             filetypes=[
                 ("Documento PDF", "*.pdf"),
                 ("Todos los archivos", "*.*")
@@ -1009,7 +1009,7 @@ class MainWindow:
         self.question_entry.insert("1.0", "Ejemplo: Cuales son las penalizaciones?")
         
         self.stats_label.configure(text="")
-        self.status_label.configure(text="✅ Sistema listo")
+        self.status_label.configure(text="Sistema listo")
         
         self.btn_ask.configure(state="disabled")
         self.btn_analyze.configure(state="disabled")
