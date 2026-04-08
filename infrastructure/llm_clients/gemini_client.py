@@ -9,6 +9,7 @@ from typing import List, Optional
 from dataclasses import dataclass
 
 from google import genai
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -23,18 +24,16 @@ class ModeloInfo:
 class GeminiClient:
     """
     Cliente profesional para Gemini API.
-    
-    Caracteristicas:
-    - Reintentos automaticos con backoff progresivo
-    - Fallback a modelo mas estable (gemini-2.0-flash)
-    - Manejo diferenciado de errores (503, 429, 401)
     """
     
     def __init__(self, api_key: Optional[str] = None):
+        load_dotenv()
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.modelo_predeterminado = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self._client = None
         self._modelos_chat = []
         self._modelos_embedding = []
+        logger.info(f"GeminiClient inicializado con modelo predeterminado: {self.modelo_predeterminado}")
     
     @property
     def client(self):
@@ -44,11 +43,10 @@ class GeminiClient:
             self._client = genai.Client(api_key=self.api_key)
         return self._client
 
-    # ==================== METODO CENTRAL ====================
     def generar_contenido(
         self,
         prompt: str,
-        modelo: str = "gemini-2.5-flash",
+        modelo: Optional[str] = None,
         max_retries: int = 3,
         fallback_modelo: str = "gemini-2.0-flash"
     ) -> Optional[str]:
@@ -57,13 +55,18 @@ class GeminiClient:
         
         Args:
             prompt: Prompt para el modelo
-            modelo: Modelo principal a usar
+            modelo: Modelo a usar (si no se especifica, usa el de configuracion)
             max_retries: Numero maximo de reintentos
             fallback_modelo: Modelo alternativo si falla el principal
             
         Returns:
             Texto generado o None si falla
         """
+        if modelo is None:
+            modelo = self.modelo_predeterminado
+        
+        logger.info(f"Usando modelo: {modelo}")
+        
         for intento in range(max_retries):
             try:
                 logger.info(f"Intento {intento+1}/{max_retries} - Modelo: {modelo}")
@@ -84,7 +87,7 @@ class GeminiClient:
                 
                 if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg.lower():
                     wait_time = 2 * (intento + 1)
-                    logger.warning(f"Gemini saturado (intento {intento+1}/{max_retries}) - Esperando {wait_time}s")
+                    logger.warning(f"Gemini saturado con modelo {modelo} (intento {intento+1}/{max_retries}) - Esperando {wait_time}s")
                     time.sleep(wait_time)
                     continue
                 
@@ -98,6 +101,13 @@ class GeminiClient:
                     logger.error(f"API Key invalida: {error_msg}")
                     raise ValueError("API key invalida")
                 
+                elif "404" in error_msg or "not found" in error_msg.lower():
+                    logger.error(f"Modelo no encontrado: {modelo}")
+                    if fallback_modelo and modelo != fallback_modelo:
+                        logger.info(f"Intentando con modelo alternativo: {fallback_modelo}")
+                        return self.generar_contenido(prompt, fallback_modelo, max_retries, None)
+                    raise ValueError(f"Modelo no disponible: {modelo}")
+                
                 else:
                     logger.error(f"Error inesperado en intento {intento+1}: {error_msg}")
                     if intento == max_retries - 1:
@@ -108,29 +118,15 @@ class GeminiClient:
         if fallback_modelo and modelo != fallback_modelo:
             try:
                 logger.info(f"Intentando fallback con modelo: {fallback_modelo}")
-                
-                response = self.client.models.generate_content(
-                    model=fallback_modelo,
-                    contents=prompt
-                )
-                
-                if response and response.text:
-                    logger.info(f"Fallback exitoso con {fallback_modelo}")
-                    return response.text
-                else:
-                    logger.warning(f"Fallback sin respuesta")
-                    
+                return self.generar_contenido(prompt, fallback_modelo, max_retries, None)
             except Exception as e:
                 logger.error(f"Fallback fallo: {e}")
         
         logger.error("Todos los intentos fallaron")
         return None
 
-    # ==================== LISTAR TODOS LOS MODELOS ====================
     def listar_modelos_chat(self) -> List[ModeloInfo]:
-        """
-        Lista TODOS los modelos disponibles para chat de Gemini.
-        """
+        """Lista TODOS los modelos disponibles para chat de Gemini."""
         if self._modelos_chat:
             return self._modelos_chat
         
@@ -141,9 +137,7 @@ class GeminiClient:
                 nombre = modelo.name
                 nombre_limpio = nombre.replace("models/", "")
                 
-                # Solo incluir modelos de Gemini (no Gemma)
                 if "gemini" in nombre_limpio.lower():
-                    # Excluir modelos que no son de chat
                     excluir = ["embed", "image", "audio", "video", "tts", "imagen", "veo", "robotics"]
                     if not any(x in nombre_limpio.lower() for x in excluir):
                         if nombre_limpio not in [m.nombre for m in self._modelos_chat]:
@@ -154,9 +148,7 @@ class GeminiClient:
                                 descripcion=descripcion
                             ))
             
-            # Ordenar por version (mas nuevos primero)
             self._modelos_chat.sort(key=lambda x: x.nombre, reverse=True)
-            
             logger.info(f"Modelos de chat encontrados: {len(self._modelos_chat)}")
             return self._modelos_chat
             
@@ -165,9 +157,7 @@ class GeminiClient:
             return []
     
     def listar_modelos_embedding(self) -> List[ModeloInfo]:
-        """
-        Lista TODOS los modelos disponibles para embeddings.
-        """
+        """Lista los modelos disponibles para embeddings."""
         if self._modelos_embedding:
             return self._modelos_embedding
         
@@ -178,7 +168,6 @@ class GeminiClient:
                 nombre = modelo.name
                 nombre_limpio = nombre.replace("models/", "")
                 
-                # Incluir todos los modelos que contengan "embed"
                 if "embed" in nombre_limpio.lower():
                     if nombre_limpio not in [m.nombre for m in self._modelos_embedding]:
                         descripcion = self._generar_descripcion_embedding(nombre_limpio)
@@ -196,7 +185,6 @@ class GeminiClient:
             return []
     
     def _generar_descripcion_chat(self, nombre: str) -> str:
-        """Genera descripcion para modelo de chat."""
         if "3.1-pro" in nombre:
             return "Ultima generacion Pro, maxima calidad"
         elif "3.1-flash" in nombre:
@@ -221,13 +209,10 @@ class GeminiClient:
             return "Ultima version del modelo Flash"
         elif "pro-latest" in nombre:
             return "Ultima version del modelo Pro"
-        elif "computer-use" in nombre:
-            return "Modelo para uso con computadora"
         else:
             return "Modelo de lenguaje Gemini"
     
     def _generar_descripcion_embedding(self, nombre: str) -> str:
-        """Genera descripcion para modelo de embedding."""
         if "embedding-2" in nombre:
             return "Nuevo modelo de embeddings, mejor calidad para RAG"
         elif "embedding-001" in nombre:
@@ -235,7 +220,6 @@ class GeminiClient:
         else:
             return "Modelo de embeddings"
     
-    # ==================== METODOS EXISTENTES ====================
     def validar_api_key(self) -> bool:
         """Valida que la API key sea correcta."""
         try:

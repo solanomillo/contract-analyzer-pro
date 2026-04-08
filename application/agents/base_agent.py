@@ -6,11 +6,13 @@ Define la interfaz comun y funcionalidades compartidas.
 import logging
 import json
 import re
+import os
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
 from infrastructure.llm_clients.gemini_client import GeminiClient
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,10 @@ class BaseAgent(ABC):
     def __init__(self, api_key: Optional[str] = None):
         self.client = GeminiClient(api_key=api_key)
         self._ultimo_error: Optional[str] = None
-        logger.info(f"Inicializando agente: {self.__class__.__name__}")
+        # Cargar modelo desde .env
+        load_dotenv()
+        self.modelo_predeterminado = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        logger.info(f"Inicializando agente: {self.__class__.__name__} con modelo: {self.modelo_predeterminado}")
     
     def get_ultimo_error(self) -> Optional[str]:
         """Retorna el ultimo error ocurrido."""
@@ -75,17 +80,20 @@ class BaseAgent(ABC):
         """
         pass
     
-    def _call_llm(self, prompt: str, modelo: str = "gemini-2.5-flash") -> str:
+    def _call_llm(self, prompt: str, modelo: Optional[str] = None) -> str:
         """
         Realiza una llamada al LLM de Gemini con manejo de errores.
         
         Args:
             prompt: Prompt para el LLM
-            modelo: Modelo a usar
+            modelo: Modelo a usar (si no se especifica, usa el de configuracion)
             
         Returns:
             Respuesta del LLM o cadena vacia si hay error
         """
+        if modelo is None:
+            modelo = self.modelo_predeterminado
+        
         try:
             response = self.client.generar_contenido(
                 prompt=prompt,
@@ -95,7 +103,7 @@ class BaseAgent(ABC):
             )
             
             if response is None:
-                self._ultimo_error = "El servicio de Gemini no respondio. Intenta de nuevo."
+                self._ultimo_error = f"El servicio de Gemini no respondio. Intenta de nuevo. Modelo: {modelo}"
                 logger.error(self._ultimo_error)
                 return ""
             
@@ -105,7 +113,7 @@ class BaseAgent(ABC):
         except Exception as e:
             error_msg = str(e)
             if "503" in error_msg or "UNAVAILABLE" in error_msg:
-                self._ultimo_error = "Servicio de Gemini saturado. Espera unos minutos o cambia a gemini-2.0-flash en la configuracion."
+                self._ultimo_error = f"Servicio de Gemini saturado. Espera unos minutos o cambia a gemini-2.0-flash en la configuracion. Modelo usado: {modelo}"
             elif "quota" in error_msg.lower():
                 self._ultimo_error = "Cuota de API agotada. Cambia tu API key."
             elif "invalid" in error_msg.lower():
@@ -113,7 +121,7 @@ class BaseAgent(ABC):
             else:
                 self._ultimo_error = f"Error en Gemini: {error_msg[:100]}"
             
-            logger.error(f"Error llamando a Gemini: {error_msg}")
+            logger.error(f"Error llamando a Gemini con modelo {modelo}: {error_msg}")
             return ""
     
     def _parsear_respuesta_json(self, respuesta: str) -> List[Dict[str, Any]]:
