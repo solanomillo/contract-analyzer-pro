@@ -61,7 +61,7 @@ class ConfigWindow:
         card_api = crear_card(scroll)
         card_api.pack(fill="x", pady=10)
 
-        ctk.CTkLabel(card_api, text="🔑 Gemini API Key",
+        ctk.CTkLabel(card_api, text="Gemini API Key",
                      font=ctk.CTkFont(size=16, weight="bold")
                      ).pack(anchor="w", padx=20, pady=(20, 10))
 
@@ -85,7 +85,7 @@ class ConfigWindow:
 
         self.btn_validar = ctk.CTkButton(
             btn_frame,
-            text="✓ Validar API Key",
+            text="Validar API Key",
             command=self._validar_api_key,
             width=150
         )
@@ -93,7 +93,7 @@ class ConfigWindow:
 
         self.btn_toggle = ctk.CTkButton(
             btn_frame,
-            text="👁 Mostrar",
+            text="Mostrar",
             command=self._toggle_api,
             width=100,
             fg_color="transparent",
@@ -109,7 +109,7 @@ class ConfigWindow:
         card_modelos = crear_card(scroll)
         card_modelos.pack(fill="x", pady=10)
 
-        ctk.CTkLabel(card_modelos, text="🤖 Seleccion de Modelos",
+        ctk.CTkLabel(card_modelos, text="Seleccion de Modelos",
                      font=ctk.CTkFont(size=16, weight="bold")
                      ).pack(anchor="w", padx=20, pady=(20, 10))
 
@@ -147,13 +147,13 @@ class ConfigWindow:
         card_resumen = crear_card(scroll)
         card_resumen.pack(fill="x", pady=10)
 
-        ctk.CTkLabel(card_resumen, text="📋 Resumen de Configuracion",
+        ctk.CTkLabel(card_resumen, text="Resumen de Configuracion",
                      font=ctk.CTkFont(size=16, weight="bold")
                      ).pack(anchor="w", padx=20, pady=(20, 10))
 
         self.lbl_resumen = ctk.CTkLabel(
             card_resumen,
-            text="Esperando validación de API key...",
+            text="Esperando validacion de API key...",
             justify="left"
         )
         self.lbl_resumen.pack(anchor="w", padx=20, pady=(0, 20))
@@ -164,7 +164,7 @@ class ConfigWindow:
 
         self.btn_guardar = ctk.CTkButton(
             footer,
-            text="💾 Guardar y Continuar",
+            text="Guardar y Continuar",
             state="disabled",
             height=45,
             width=200,
@@ -191,10 +191,10 @@ class ConfigWindow:
         """Muestra u oculta la API key."""
         if self.api_key_entry.cget("show") == "*":
             self.api_key_entry.configure(show="")
-            self.btn_toggle.configure(text="🙈 Ocultar")
+            self.btn_toggle.configure(text="Ocultar")
         else:
             self.api_key_entry.configure(show="*")
-            self.btn_toggle.configure(text="👁 Mostrar")
+            self.btn_toggle.configure(text="Mostrar")
 
     def _validar_api_key(self):
         """Valida la API key en segundo plano."""
@@ -204,7 +204,7 @@ class ConfigWindow:
             messagebox.showerror("Error", "Ingresa una API key")
             return
 
-        self.lbl_estado.configure(text="🔄 Validando API key...", text_color="#f39c12")
+        self.lbl_estado.configure(text="Validando API key...", text_color="#f39c12")
         self.btn_validar.configure(state="disabled")
 
         def task():
@@ -219,7 +219,7 @@ class ConfigWindow:
     def _success(self):
         """Maneja validacion exitosa."""
         self.api_key_validada = True
-        self.lbl_estado.configure(text="✅ API key valida", text_color="#2ecc71")
+        self.lbl_estado.configure(text="API key valida", text_color="#2ecc71")
         self.btn_validar.configure(state="normal")
         self.btn_guardar.configure(state="normal")
         self.combo_chat.configure(state="readonly")
@@ -230,7 +230,7 @@ class ConfigWindow:
     def _error(self, msg="API invalida"):
         """Maneja validacion fallida."""
         self.api_key_validada = False
-        self.lbl_estado.configure(text=f"❌ {msg}", text_color="#e74c3c")
+        self.lbl_estado.configure(text=f"Error: {msg}", text_color="#e74c3c")
         self.btn_validar.configure(state="normal")
         self.btn_guardar.configure(state="disabled")
         self.combo_chat.configure(state="disabled")
@@ -239,8 +239,15 @@ class ConfigWindow:
     def _cargar_modelos(self):
         """Carga los modelos disponibles."""
         def task():
-            chat, emb = self.config_service.cargar_modelos_disponibles()
-            self.root.after(0, lambda: self._set_modelos(chat, emb))
+            try:
+                chat, emb = self.config_service.cargar_modelos_disponibles()
+                self.root.after(0, lambda: self._set_modelos(chat, emb))
+            except Exception as e:
+                error_msg = str(e)
+                if "API key" in error_msg or "key" in error_msg.lower():
+                    self.root.after(0, lambda: self._error("API key invalida o no configurada"))
+                else:
+                    self.root.after(0, lambda: self._error(f"Error cargando modelos: {error_msg[:100]}"))
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -252,6 +259,8 @@ class ConfigWindow:
             self.modelos_chat = chat
             if "gemini-2.5-flash" in nombres:
                 self.modelo_chat_var.set("gemini-2.5-flash")
+            elif "gemini-2.0-flash" in nombres:
+                self.modelo_chat_var.set("gemini-2.0-flash")
             elif nombres:
                 self.modelo_chat_var.set(nombres[0])
 
@@ -267,6 +276,7 @@ class ConfigWindow:
                 self.modelo_embedding_var.set(nombres[0])
 
         self._actualizar_resumen()
+        self.lbl_estado.configure(text="API key valida - Modelos cargados", text_color="#2ecc71")
 
     def _actualizar_resumen(self):
         """Actualiza el resumen de configuracion."""
@@ -278,7 +288,7 @@ class ConfigWindow:
 
         texto = f"""
 API Key: {api_mask}
-Estado: {'✅ Valida' if self.api_key_validada else '⚠️ Pendiente'}
+Estado: {'Valida' if self.api_key_validada else 'Pendiente'}
 
 Modelo Chat: {self.modelo_chat_var.get()}
 Modelo Embedding: {self.modelo_embedding_var.get()}
@@ -296,7 +306,7 @@ Modelo Embedding: {self.modelo_embedding_var.get()}
         modelo_embedding = self.modelo_embedding_var.get()
 
         if self.config_service.guardar_configuracion(api_key, modelo_chat, modelo_embedding):
-            messagebox.showinfo("Exito", "✅ Configuracion guardada correctamente")
+            messagebox.showinfo("Exito", "Configuracion guardada correctamente")
             self.root.destroy()
             
             from interface.tkinter.main_window import MainWindow
