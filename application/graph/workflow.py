@@ -1,6 +1,7 @@
 """
 Workflow de agentes usando LangGraph.
 Router decide qué agente usar según la consulta.
+OPTIMIZADO: Analisis completo usa UNA sola llamada, no 3 agentes.
 """
 
 import logging
@@ -12,6 +13,12 @@ from langgraph.graph import StateGraph, START, END
 from application.agents.risk_agent import RiskDetectionAgent
 from application.agents.date_agent import DateExtractionAgent
 from application.agents.obligation_agent import ObligationAgent
+from application.agents.complete_analysis_agent import CompleteAnalysisAgent
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +26,7 @@ logger = logging.getLogger(__name__)
 class EstadoAnalisis(TypedDict):
     texto: str
     consulta: Optional[str]
-    hallazgos: List[Dict[str, Any]]  # Un solo campo para todos los hallazgos
+    hallazgos: List[Dict[str, Any]]
     agente_usado: str
     errores: List[str]
     resumen: str
@@ -28,55 +35,49 @@ class EstadoAnalisis(TypedDict):
 class AnalisisWorkflow:
     """
     Workflow para analisis de contratos.
-    
-    El router decide qué agente usar según la consulta del usuario.
-    Solo se ejecuta el agente necesario, no todos.
+    - Preguntas especificas: usan agente especifico (1 llamada)
+    - Analisis completo: usa CompleteAnalysisAgent (1 llamada)
     """
     
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key
         
-        # Inicializar agentes
+        self.complete_agent = CompleteAnalysisAgent(api_key=api_key)
         self.risk_agent = RiskDetectionAgent(api_key=api_key)
         self.date_agent = DateExtractionAgent(api_key=api_key)
         self.obligation_agent = ObligationAgent(api_key=api_key)
         
         self.graph = self._build_graph()
         
-        logger.info("Workflow de analisis inicializado")
+        logger.info("Workflow de analisis optimizado inicializado")
     
     def _build_graph(self) -> StateGraph:
-        """Construye el grafo de ejecucion."""
         workflow = StateGraph(EstadoAnalisis)
         
-        # Nodos
         workflow.add_node("router", self._router_node)
+        workflow.add_node("completo", self._complete_node)
         workflow.add_node("riesgo", self._risk_node)
         workflow.add_node("fechas", self._date_node)
         workflow.add_node("obligaciones", self._obligation_node)
         workflow.add_node("final", self._final_node)
         
-        # START -> Router
         workflow.add_edge(START, "router")
         
-        # Router decide que agente usar (solo UNO)
         workflow.add_conditional_edges(
             "router",
             self._router_decision,
             {
+                "completo": "completo",
                 "riesgo": "riesgo",
                 "fechas": "fechas",
-                "obligaciones": "obligaciones",
-                "todos": "riesgo"  # Si es general, usar riesgo como default
+                "obligaciones": "obligaciones"
             }
         )
         
-        # Todos los agentes van a final
+        workflow.add_edge("completo", "final")
         workflow.add_edge("riesgo", "final")
         workflow.add_edge("fechas", "final")
         workflow.add_edge("obligaciones", "final")
-        
-        # Final -> END
         workflow.add_edge("final", END)
         
         return workflow.compile()
@@ -94,22 +95,29 @@ class AnalisisWorkflow:
     def _router_decision(self, estado: EstadoAnalisis) -> str:
         consulta = estado.get("consulta", "").lower()
         
-        # Si no hay consulta especifica, usar todos (pero ejecutamos riesgo como default)
-        if not consulta:
-            logger.info("Router: sin consulta especifica, usando agente de riesgos")
-            return "riesgo"
+        # Palabras clave para analisis completo (USA UNA SOLA LLAMADA)
+        palabras_completo = ["analizar", "analisis completo", "completo", "todos", 
+                            "analiza este contrato", "resumen general", "todo el contrato",
+                            "analisis legal", "que opinas", "que riesgos tiene"]
         
-        # Palabras clave para cada tipo de agente
+        # Palabras clave para riesgos
         palabras_riesgo = ["penalizacion", "multa", "riesgo", "clausula", "rescicion", 
                           "terminacion", "responsabilidad", "exclusividad", "peligrosa"]
         
+        # Palabras clave para fechas
         palabras_fechas = ["fecha", "vencimiento", "plazo", "renovacion", "dias", 
-                          "meses", "anios", "termina", "inicia", "vigencia"]
+                          "meses", "anios", "termina", "inicia", "vigencia", "duracion"]
         
+        # Palabras clave para obligaciones
         palabras_obligaciones = ["pago", "obligacion", "debe", "abonara", "pagara", 
                                 "monto", "precio", "costo", "honorarios", "abonar"]
         
-        # Decidir segun la consulta
+        # Detectar analisis completo (USA UNA SOLA LLAMADA)
+        if any(p in consulta for p in palabras_completo):
+            logger.info("Router: usando agente COMPLETO (una sola llamada)")
+            return "completo"
+        
+        # Detectar tipo especifico
         if any(p in consulta for p in palabras_riesgo):
             logger.info("Router: usando agente de RIESGOS")
             return "riesgo"
@@ -122,9 +130,26 @@ class AnalisisWorkflow:
             logger.info("Router: usando agente de OBLIGACIONES")
             return "obligaciones"
         
-        # Consulta general, usar agente de riesgos por defecto
-        logger.info("Router: consulta general, usando agente de RIESGOS")
-        return "riesgo"
+        # Por defecto, usar agente completo (una sola llamada)
+        logger.info("Router: consulta general, usando agente COMPLETO")
+        return "completo"
+    
+    def _complete_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
+        """UNA SOLA LLAMADA a Gemini para todo el analisis."""
+        logger.info("Agente Completo: analizando contrato en UNA sola llamada...")
+        
+        try:
+            texto = estado.get("texto", "")
+            hallazgos = self.complete_agent.analizar(texto)
+            estado["hallazgos"] = [h.to_dict() for h in hallazgos]
+            estado["agente_usado"] = "completo"
+            logger.info(f"Analisis completo generado: {len(hallazgos)} hallazgos")
+                
+        except Exception as e:
+            logger.error(f"Error en agente completo: {e}")
+            estado["errores"].append(str(e))
+        
+        return estado
     
     def _risk_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
         logger.info("Agente Riesgo: analizando...")
@@ -188,12 +213,10 @@ class AnalisisWorkflow:
         
         hallazgos = estado.get("hallazgos", [])
         
-        # Clasificar por nivel de riesgo
         altos = [h for h in hallazgos if h.get("riesgo") == "ALTO"]
         medios = [h for h in hallazgos if h.get("riesgo") == "MEDIO"]
         bajos = [h for h in hallazgos if h.get("riesgo") == "BAJO"]
         
-        # Generar resumen
         resumen = []
         resumen.append("=" * 60)
         resumen.append("RESULTADO DEL ANALISIS")

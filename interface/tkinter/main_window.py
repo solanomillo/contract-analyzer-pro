@@ -235,7 +235,6 @@ class MainWindow:
     
     def _build_qa_tab(self, parent):
         """Construye la pestaña de preguntas y respuestas."""
-        # Frame para contener todo
         qa_frame = ctk.CTkFrame(parent, fg_color="transparent")
         qa_frame.pack(fill="both", expand=True)
         
@@ -249,7 +248,6 @@ class MainWindow:
         self.question_entry.pack(fill="x", pady=(0, 10))
         self.question_entry.insert("1.0", "Ejemplo: Cuales son las penalizaciones por incumplimiento?")
         
-        # Frame para boton y barra de progreso
         btn_frame = ctk.CTkFrame(qa_frame, fg_color="transparent")
         btn_frame.pack(fill="x", pady=(0, 15))
         
@@ -262,7 +260,6 @@ class MainWindow:
         )
         self.btn_ask.pack(side="left")
         
-        # Barra de progreso para preguntas
         self.qa_progress = ctk.CTkProgressBar(btn_frame, width=300)
         self.qa_progress.pack(side="left", padx=(10, 0))
         self.qa_progress.set(0)
@@ -344,7 +341,6 @@ class MainWindow:
         )
         self.radio_obligaciones.pack(anchor="w", pady=2)
         
-        # Frame para boton y barra de progreso
         btn_analysis_frame = ctk.CTkFrame(analysis_frame, fg_color="transparent")
         btn_analysis_frame.pack(fill="x", pady=(10, 5))
         
@@ -359,7 +355,6 @@ class MainWindow:
         )
         self.btn_analyze.pack(side="left")
         
-        # Barra de progreso del analisis
         self.analysis_progress = ctk.CTkProgressBar(btn_analysis_frame, width=300)
         self.analysis_progress.pack(side="left", padx=(10, 0))
         self.analysis_progress.set(0)
@@ -596,6 +591,69 @@ Chunks: {resultado['total_chunks']}"""
         self.preview_text.configure(state="disabled")
         self.stats_label.configure(text=f"Total: {resultado['total_caracteres']} caracteres | {resultado['total_chunks']} chunks")
     
+    def _generar_respuesta_especifica(self, pregunta: str, resultado: dict) -> str:
+        """Genera una respuesta especifica y CONCRETA para la pregunta del usuario."""
+        pregunta_lower = pregunta.lower()
+        hallazgos = resultado.get("hallazgos", [])
+        
+        if not hallazgos:
+            return "No se encontró información relevante en el contrato para responder a tu pregunta."
+        
+        # Penalizaciones
+        if "penalizacion" in pregunta_lower or "multa" in pregunta_lower or "penalización" in pregunta_lower:
+            for h in hallazgos:
+                if "penalizacion" in h.get("tipo", "").lower():
+                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+            for h in hallazgos:
+                if "penalización" in h.get("descripcion", "").lower() or "incumplimiento" in h.get("descripcion", "").lower():
+                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+        
+        # Rescisión
+        if any(p in pregunta_lower for p in ["rescindir", "terminar", "cancelar", "rescisión", "terminación"]):
+            for h in hallazgos:
+                if "rescision" in h.get("tipo", "").lower():
+                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+        
+        # Fechas
+        if any(p in pregunta_lower for p in ["fecha", "vencimiento", "plazo", "comienza", "termina", "inicia", "dura"]):
+            for h in hallazgos:
+                if "fecha" in h.get("tipo", "").lower():
+                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}"
+        
+        # Pagos
+        if any(p in pregunta_lower for p in ["pago", "precio", "costo", "monto", "abonar", "pagar"]):
+            for h in hallazgos:
+                if "pago" in h.get("tipo", "").lower():
+                    return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+        
+        # Un solo hallazgo
+        if len(hallazgos) == 1:
+            h = hallazgos[0]
+            return f"📌 **Respuesta:**\n\n{h.get('descripcion', '')}\n\n💡 **Recomendación:**\n{h.get('recomendacion', '')}"
+        
+        # Respuesta general con los principales hallazgos
+        respuesta = "📌 **Respuesta:**\n\n"
+        for i, h in enumerate(hallazgos[:3], 1):
+            respuesta += f"{i}. {h.get('descripcion', '')}\n"
+            if h.get('recomendacion'):
+                respuesta += f"   💡 {h.get('recomendacion', '')}\n\n"
+        
+        return respuesta if len(respuesta) > 20 else "No se encontró información específica para tu pregunta."
+    
+    def _extraer_contexto_resumido(self, resultado: dict) -> str:
+        """Extrae un contexto resumido para mostrar."""
+        hallazgos = resultado.get("hallazgos", [])
+        if not hallazgos:
+            return ""
+        
+        contexto = "**Contexto utilizado:**\n\n"
+        for i, h in enumerate(hallazgos[:2], 1):
+            texto = h.get('texto_relevante', '')[:200]
+            if texto:
+                contexto += f"{i}. {texto}...\n\n"
+        
+        return contexto
+    
     def _ask_question(self):
         """Realiza una pregunta sobre el contrato."""
         if not self.current_contract_data:
@@ -616,7 +674,6 @@ Chunks: {resultado['total_chunks']}"""
         self.btn_ask.configure(state="disabled", text="⏳ Procesando...")
         self.status_label.configure(text="🔍 Buscando...")
         
-        # Mostrar barra de progreso
         self.qa_progress.pack(side="left", padx=(10, 0))
         self.qa_progress.set(0.2)
 
@@ -628,7 +685,7 @@ Chunks: {resultado['total_chunks']}"""
 
                     self.root.after(0, lambda: self.qa_progress.set(0.5))
                     self.root.after(0, lambda: self.status_label.configure(
-                        text=f"🔄 Procesando pregunta (intento {intento+1}/3)..."
+                        text=f"🔄 Procesando (intento {intento+1}/3)..."
                     ))
 
                     resultado = self.workflow.ejecutar_sync(
@@ -638,7 +695,7 @@ Chunks: {resultado['total_chunks']}"""
 
                     if resultado.get("exito"):
                         respuesta = self._generar_respuesta_especifica(pregunta, resultado)
-                        contexto = self._extraer_contexto(resultado)
+                        contexto = self._extraer_contexto_resumido(resultado)
                         self.root.after(0, lambda: self._show_answer(respuesta, contexto))
                         return
                     else:
@@ -646,6 +703,7 @@ Chunks: {resultado['total_chunks']}"""
 
                 except Exception as e:
                     error = str(e)
+                    logger.error(f"Error en pregunta: {error}")
 
                     if "503" in error or "UNAVAILABLE" in error or "high demand" in error.lower():
                         if intento < 2:
@@ -655,7 +713,7 @@ Chunks: {resultado['total_chunks']}"""
                     elif "quota" in error.lower() or "exceeded" in error.lower():
                         respuesta = "⚠️ Cuota de API agotada. Cambia tu API key."
                     else:
-                        respuesta = f"❌ Error: {error}"
+                        respuesta = f"❌ Error: {error[:200]}"
 
                     self.root.after(0, lambda: self._show_answer(respuesta, ""))
                     return
@@ -673,67 +731,8 @@ Chunks: {resultado['total_chunks']}"""
         self.status_label.configure(text="✅ Listo")
         self.is_answering = False
     
-    def _generar_respuesta_especifica(self, pregunta: str, resultado: dict) -> str:
-        """
-        Genera una respuesta especifica para la pregunta del usuario.
-        """
-        pregunta_lower = pregunta.lower()
-        respuesta_parts = []
-        
-        # Detectar tipo de pregunta
-        if "penalizacion" in pregunta_lower or "multa" in pregunta_lower:
-            hallazgos = resultado.get("hallazgos_riesgo", [])
-            for h in hallazgos:
-                if "penalizacion" in h.get("tipo", "").lower() or "multa" in h.get("descripcion", "").lower():
-                    respuesta_parts.append(f"📌 **Penalización encontrada:**\n{h.get('descripcion', '')}\n")
-                    respuesta_parts.append(f"📍 **Texto relevante:**\n{h.get('texto_relevante', '')}\n")
-                    respuesta_parts.append(f"💡 **Recomendación:**\n{h.get('recomendacion', '')}\n")
-        
-        elif "rescindir" in pregunta_lower or "terminar" in pregunta_lower or "cancelar" in pregunta_lower:
-            hallazgos = resultado.get("hallazgos_riesgo", [])
-            for h in hallazgos:
-                if "rescision" in h.get("tipo", "").lower():
-                    respuesta_parts.append(f"📌 **Rescisión del contrato:**\n{h.get('descripcion', '')}\n")
-                    respuesta_parts.append(f"📍 **Texto relevante:**\n{h.get('texto_relevante', '')}\n")
-                    respuesta_parts.append(f"💡 **Recomendación:**\n{h.get('recomendacion', '')}\n")
-        
-        elif "fecha" in pregunta_lower or "vencimiento" in pregunta_lower or "plazo" in pregunta_lower:
-            hallazgos = resultado.get("hallazgos_fechas", [])
-            for h in hallazgos:
-                respuesta_parts.append(f"📌 **Fecha importante:**\n{h.get('descripcion', '')}\n")
-                respuesta_parts.append(f"📍 **Texto relevante:**\n{h.get('texto_relevante', '')}\n")
-        
-        elif "pago" in pregunta_lower or "precio" in pregunta_lower or "costo" in pregunta_lower:
-            hallazgos = resultado.get("hallazgos_obligaciones", [])
-            for h in hallazgos:
-                if "pago" in h.get("tipo", "").lower():
-                    respuesta_parts.append(f"📌 **Obligación de pago:**\n{h.get('descripcion', '')}\n")
-                    respuesta_parts.append(f"📍 **Texto relevante:**\n{h.get('texto_relevante', '')}\n")
-        
-        # Si no se encontró nada especifico, mostrar resumen general
-        if not respuesta_parts:
-            respuesta_parts.append("📋 **Resumen del análisis:**\n")
-            respuesta_parts.append(resultado.get("resumen", "No se encontró información relevante."))
-        
-        return "\n".join(respuesta_parts)
-    
-    def _extraer_contexto(self, resultado: dict) -> str:
-        """Extrae el contexto relevante del resultado."""
-        contextos = []
-        
-        for h in resultado.get("hallazgos_riesgo", [])[:3]:
-            contextos.append(f"🔴 Riesgo: {h.get('descripcion', '')[:200]}")
-        
-        for h in resultado.get("hallazgos_fechas", [])[:2]:
-            contextos.append(f"📅 Fecha: {h.get('descripcion', '')[:200]}")
-        
-        for h in resultado.get("hallazgos_obligaciones", [])[:2]:
-            contextos.append(f"💰 Obligación: {h.get('descripcion', '')[:200]}")
-        
-        return "\n\n".join(contextos) if contextos else "No se encontró contexto relevante."
-    
     def _show_answer(self, respuesta: str, contexto: str):
-        """Muestra la respuesta."""
+        """Muestra la respuesta en la UI."""
         self.answer_text.configure(state="normal")
         self.answer_text.delete("1.0", "end")
         self.answer_text.insert("1.0", respuesta)
@@ -760,7 +759,6 @@ Chunks: {resultado['total_chunks']}"""
         self.btn_analyze.configure(state="disabled", text="⏳ Analizando...")
         self.status_label.configure(text="🔍 Analizando contrato...")
         
-        # Mostrar barra de progreso
         self.analysis_progress.pack(side="left", padx=(10, 0))
         self.analysis_progress.set(0.2)
 
@@ -772,7 +770,7 @@ Chunks: {resultado['total_chunks']}"""
 
                     self.root.after(0, lambda: self.analysis_progress.set(0.5))
                     self.root.after(0, lambda: self.status_label.configure(
-                        text=f"🔄 Analizando contrato (intento {intento+1}/3)..."
+                        text=f"🔄 Analizando (intento {intento+1}/3)..."
                     ))
 
                     resultado = self.workflow.ejecutar_sync(
@@ -788,16 +786,19 @@ Chunks: {resultado['total_chunks']}"""
 
                 except Exception as e:
                     error = str(e)
+                    logger.error(f"Error en analisis: {error}")
 
                     if "503" in error or "UNAVAILABLE" in error or "high demand" in error.lower():
                         if intento < 2:
                             time.sleep(2 * (intento + 1))
                             continue
-                        error = "⚠️ Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
+                        error_msg = "⚠️ Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
                     elif "quota" in error.lower() or "exceeded" in error.lower():
-                        error = "⚠️ Cuota de API agotada. Cambia tu API key."
-                    
-                    self.root.after(0, lambda: self._show_analysis_error(error))
+                        error_msg = "⚠️ Cuota de API agotada. Cambia tu API key."
+                    else:
+                        error_msg = f"❌ Error: {error[:200]}"
+
+                    self.root.after(0, lambda: self._show_analysis_error(error_msg))
                     return
                 finally:
                     self.root.after(0, lambda: self.analysis_progress.set(1.0))
@@ -815,39 +816,27 @@ Chunks: {resultado['total_chunks']}"""
     
     def _show_analysis_results(self, resultado: dict):
         """Muestra los resultados del analisis."""
-        
         self.summary_text.configure(state="normal")
         self.summary_text.delete("1.0", "end")
         self.summary_text.insert("1.0", resultado.get("resumen", "No se genero resumen"))
         self.summary_text.configure(state="disabled")
         
+        hallazgos = resultado.get("hallazgos", [])
+        
         altos = []
         medios = []
         bajos = []
         
-        for h in resultado.get("hallazgos_riesgo", []):
+        for h in hallazgos:
             riesgo = h.get("riesgo", "MEDIO")
-            texto = f"• {h.get('descripcion', '')}\n  📍 {h.get('texto_relevante', '')[:150]}...\n  💡 {h.get('recomendacion', '')}\n\n"
-            if riesgo == "ALTO":
-                altos.append(texto)
-            elif riesgo == "MEDIO":
-                medios.append(texto)
+            texto = f"• {h.get('descripcion', '')}\n"
+            if h.get('texto_relevante'):
+                texto += f"  📍 {h.get('texto_relevante', '')[:150]}...\n"
+            if h.get('recomendacion'):
+                texto += f"  💡 {h.get('recomendacion', '')}\n\n"
             else:
-                bajos.append(texto)
-        
-        for h in resultado.get("hallazgos_fechas", []):
-            riesgo = h.get("riesgo", "MEDIO")
-            texto = f"• {h.get('descripcion', '')}\n  📍 {h.get('texto_relevante', '')[:150]}...\n\n"
-            if riesgo == "ALTO":
-                altos.append(texto)
-            elif riesgo == "MEDIO":
-                medios.append(texto)
-            else:
-                bajos.append(texto)
-        
-        for h in resultado.get("hallazgos_obligaciones", []):
-            riesgo = h.get("riesgo", "MEDIO")
-            texto = f"• {h.get('descripcion', '')}\n  💡 {h.get('recomendacion', '')}\n\n"
+                texto += "\n"
+            
             if riesgo == "ALTO":
                 altos.append(texto)
             elif riesgo == "MEDIO":
@@ -877,11 +866,15 @@ Chunks: {resultado['total_chunks']}"""
         self.is_analyzing = False
         self.analysis_progress.pack_forget()
         
+        altos_count = len(altos)
+        medios_count = len(medios)
+        bajos_count = len(bajos)
+        
         messagebox.showinfo("Analisis Completado", 
                            f"Analisis finalizado.\n\n"
-                           f"Riesgos Altos: {len(altos)}\n"
-                           f"Riesgos Medios: {len(medios)}\n"
-                           f"Riesgos Bajos: {len(bajos)}")
+                           f"Riesgos Altos: {altos_count}\n"
+                           f"Riesgos Medios: {medios_count}\n"
+                           f"Riesgos Bajos: {bajos_count}")
     
     def _show_analysis_error(self, error: str):
         """Muestra error en el analisis."""
@@ -941,7 +934,6 @@ Chunks: {resultado['total_chunks']}"""
         if self.rag_service:
             self.rag_service.clear()
         
-        # Limpiar UI
         self.info_text.configure(state="normal")
         self.info_text.delete("1.0", "end")
         self.info_text.insert("1.0", "Esperando carga...")
