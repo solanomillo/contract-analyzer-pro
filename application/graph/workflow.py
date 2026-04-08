@@ -35,8 +35,10 @@ class EstadoAnalisis(TypedDict):
 class AnalisisWorkflow:
     """
     Workflow para analisis de contratos.
-    - Preguntas especificas: usan agente especifico (1 llamada)
-    - Analisis completo: usa CompleteAnalysisAgent (1 llamada)
+    - Analisis Completo: usa CompleteAnalysisAgent (1 llamada)
+    - Solo Riesgos: usa RiskDetectionAgent (1 llamada)
+    - Solo Fechas: usa DateExtractionAgent (1 llamada)
+    - Solo Obligaciones: usa ObligationAgent (1 llamada)
     """
     
     def __init__(self, api_key: Optional[str] = None):
@@ -95,64 +97,75 @@ class AnalisisWorkflow:
     def _router_decision(self, estado: EstadoAnalisis) -> str:
         consulta = estado.get("consulta", "").lower()
         
-        # Palabras clave para analisis completo (USA UNA SOLA LLAMADA)
-        palabras_completo = ["analizar", "analisis completo", "completo", "todos", 
-                            "analiza este contrato", "resumen general", "todo el contrato",
-                            "analisis legal", "que opinas", "que riesgos tiene"]
+        logger.info(f"Router evaluando consulta: '{consulta}'")
+        
+        # Palabras clave para analisis completo
+        palabras_completo = [
+            "analizar contrato completo", "analisis completo", "completo", "todos",
+            "analiza este contrato", "resumen general", "todo el contrato",
+            "analisis legal", "que opinas", "que riesgos tiene"
+        ]
         
         # Palabras clave para riesgos
-        palabras_riesgo = ["penalizacion", "multa", "riesgo", "clausula", "rescicion", 
-                          "terminacion", "responsabilidad", "exclusividad", "peligrosa"]
+        palabras_riesgo = [
+            "penalizacion", "multa", "riesgo", "clausula", "rescicion",
+            "terminacion", "responsabilidad", "exclusividad", "peligrosa",
+            "solo riesgos", "clausulas peligrosas", "analizar solo riesgos"
+        ]
         
         # Palabras clave para fechas
-        palabras_fechas = ["fecha", "vencimiento", "plazo", "renovacion", "dias", 
-                          "meses", "anios", "termina", "inicia", "vigencia", "duracion"]
+        palabras_fechas = [
+            "fecha", "vencimiento", "plazo", "renovacion", "dias",
+            "meses", "anios", "termina", "inicia", "vigencia", "duracion",
+            "solo fechas", "analizar solo fechas"
+        ]
         
         # Palabras clave para obligaciones
-        palabras_obligaciones = ["pago", "obligacion", "debe", "abonara", "pagara", 
-                                "monto", "precio", "costo", "honorarios", "abonar"]
+        palabras_obligaciones = [
+            "pago", "obligacion", "debe", "abonara", "pagara",
+            "monto", "precio", "costo", "honorarios", "abonar",
+            "solo obligaciones", "analizar solo obligaciones"
+        ]
         
-        # Detectar analisis completo (USA UNA SOLA LLAMADA)
+        # Detectar analisis completo
         if any(p in consulta for p in palabras_completo):
-            logger.info("Router: usando agente COMPLETO (una sola llamada)")
+            logger.info("=== ROUTER DECISION: Usando agente COMPLETO ===")
             return "completo"
         
         # Detectar tipo especifico
         if any(p in consulta for p in palabras_riesgo):
-            logger.info("Router: usando agente de RIESGOS")
+            logger.info("=== ROUTER DECISION: Usando agente de RIESGOS ===")
             return "riesgo"
         
         if any(p in consulta for p in palabras_fechas):
-            logger.info("Router: usando agente de FECHAS")
+            logger.info("=== ROUTER DECISION: Usando agente de FECHAS ===")
             return "fechas"
         
         if any(p in consulta for p in palabras_obligaciones):
-            logger.info("Router: usando agente de OBLIGACIONES")
+            logger.info("=== ROUTER DECISION: Usando agente de OBLIGACIONES ===")
             return "obligaciones"
         
-        # Por defecto, usar agente completo (una sola llamada)
-        logger.info("Router: consulta general, usando agente COMPLETO")
+        # Por defecto, usar agente completo
+        logger.info("=== ROUTER DECISION: Consulta general, usando agente COMPLETO ===")
         return "completo"
     
     def _complete_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
         """UNA SOLA LLAMADA a Gemini para todo el analisis."""
-        logger.info("Agente Completo: analizando contrato en UNA sola llamada...")
+        logger.info("Agente Completo: analizando contrato completo...")
         
         try:
             texto = estado.get("texto", "")
             hallazgos = self.complete_agent.analizar(texto)
             
-            # Verificar si hubo error en el agente
             ultimo_error = self.complete_agent.get_ultimo_error()
             if ultimo_error:
                 logger.error(f"Error en agente completo: {ultimo_error}")
-                # Crear un hallazgo de error para mostrar al usuario
                 error_hallazgo = {
                     "tipo": "error",
                     "descripcion": ultimo_error,
                     "riesgo": "ALTO",
                     "texto_relevante": "",
-                    "recomendacion": "Revisa tu conexion o cambia de modelo en la configuracion. Se recomienda usar gemini-2.0-flash que es mas estable."
+                    "recomendacion": "Revisa tu conexion o cambia de modelo en la configuracion."
                 }
                 estado["hallazgos"] = [error_hallazgo]
                 estado["errores"].append(ultimo_error)
@@ -169,7 +182,7 @@ class AnalisisWorkflow:
                 "descripcion": f"Error en el analisis: {str(e)[:200]}",
                 "riesgo": "ALTO",
                 "texto_relevante": "",
-                "recomendacion": "Intenta nuevamente o cambia el modelo en la configuracion a gemini-2.0-flash."
+                "recomendacion": "Intenta nuevamente o cambia el modelo en la configuracion."
             }
             estado["hallazgos"] = [error_hallazgo]
             estado["errores"].append(str(e))
@@ -178,13 +191,12 @@ class AnalisisWorkflow:
     
     def _risk_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
         """Nodo de deteccion de riesgos."""
-        logger.info("Agente Riesgo: analizando...")
+        logger.info("Agente Riesgo: analizando clausulas peligrosas...")
         
         try:
             texto = estado.get("texto", "")
             hallazgos = self.risk_agent.analizar(texto)
             
-            # Verificar si hubo error en el agente
             ultimo_error = self.risk_agent.get_ultimo_error()
             if ultimo_error:
                 logger.error(f"Error en agente riesgo: {ultimo_error}")
@@ -201,7 +213,7 @@ class AnalisisWorkflow:
                 estado["hallazgos"] = [h.to_dict() for h in hallazgos]
             
             estado["agente_usado"] = "riesgo"
-            logger.info(f"Hallazgos encontrados: {len(estado['hallazgos'])}")
+            logger.info(f"Riesgos encontrados: {len(estado['hallazgos'])}")
             
             for h in hallazgos:
                 logger.info(f"  - {h.tipo}: {h.descripcion[:50]}... (riesgo: {h.riesgo})")
@@ -222,7 +234,7 @@ class AnalisisWorkflow:
     
     def _date_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
         """Nodo de extraccion de fechas."""
-        logger.info("Agente Fechas: extrayendo...")
+        logger.info("Agente Fechas: extrayendo fechas criticas...")
         
         try:
             texto = estado.get("texto", "")
@@ -244,7 +256,7 @@ class AnalisisWorkflow:
                 estado["hallazgos"] = [h.to_dict() for h in hallazgos]
             
             estado["agente_usado"] = "fechas"
-            logger.info(f"Hallazgos encontrados: {len(estado['hallazgos'])}")
+            logger.info(f"Fechas encontradas: {len(estado['hallazgos'])}")
             
             for h in hallazgos:
                 logger.info(f"  - {h.tipo}: {h.descripcion[:50]}...")
@@ -265,7 +277,7 @@ class AnalisisWorkflow:
     
     def _obligation_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
         """Nodo de deteccion de obligaciones."""
-        logger.info("Agente Obligaciones: detectando...")
+        logger.info("Agente Obligaciones: detectando obligaciones...")
         
         try:
             texto = estado.get("texto", "")
@@ -287,7 +299,7 @@ class AnalisisWorkflow:
                 estado["hallazgos"] = [h.to_dict() for h in hallazgos]
             
             estado["agente_usado"] = "obligaciones"
-            logger.info(f"Hallazgos encontrados: {len(estado['hallazgos'])}")
+            logger.info(f"Obligaciones encontradas: {len(estado['hallazgos'])}")
             
             for h in hallazgos:
                 logger.info(f"  - {h.tipo}: {h.descripcion[:50]}...")
@@ -312,11 +324,9 @@ class AnalisisWorkflow:
         
         hallazgos = estado.get("hallazgos", [])
         
-        # Verificar si hay error
         hay_error = any(h.get("tipo") == "error" for h in hallazgos)
         
         if hay_error:
-            # Mostrar mensaje de error
             resumen = []
             resumen.append("=" * 60)
             resumen.append("ERROR EN EL ANALISIS")
@@ -329,7 +339,6 @@ class AnalisisWorkflow:
             estado["resultado_final"] = estado["resumen"]
             return estado
         
-        # Clasificar por nivel de riesgo
         altos = [h for h in hallazgos if h.get("riesgo") == "ALTO"]
         medios = [h for h in hallazgos if h.get("riesgo") == "MEDIO"]
         bajos = [h for h in hallazgos if h.get("riesgo") == "BAJO"]

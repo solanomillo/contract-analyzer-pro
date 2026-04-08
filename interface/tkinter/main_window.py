@@ -711,6 +711,23 @@ Chunks: {resultado['total_chunks']}"""
         
         self.analysis_progress.pack(side="left", padx=(10, 0))
         self.analysis_progress.set(0.2)
+        
+        # Obtener el tipo de analisis seleccionado
+        analysis_type = self.analysis_type_var.get()
+        
+        # Mapear el tipo de analisis a la consulta correcta para el router
+        # Esto asegura que se use el agente correspondiente
+        consulta_map = {
+            "completo": "analizar contrato completo",
+            "riesgo": "analizar solo riesgos y clausulas peligrosas",
+            "fechas": "analizar solo fechas importantes y plazos",
+            "obligaciones": "analizar solo obligaciones de pago y condiciones"
+        }
+        
+        consulta = consulta_map.get(analysis_type, "analizar contrato completo")
+        
+        logger.info(f"Iniciando analisis de tipo: {analysis_type} -> Consulta: {consulta}")
+        logger.info(f"El router usara el agente correspondiente a: {analysis_type}")
 
         def task():
             for intento in range(3):
@@ -725,10 +742,12 @@ Chunks: {resultado['total_chunks']}"""
 
                     resultado = self.workflow.ejecutar_sync(
                         self.current_contract_data['texto_completo'],
-                        consulta="analizar contrato"
+                        consulta=consulta
                     )
 
                     if resultado.get("exito"):
+                        agente_usado = resultado.get("agente_usado", "desconocido")
+                        logger.info(f"Analisis completado usando agente: {agente_usado}")
                         self.root.after(0, lambda: self._show_analysis_results(resultado))
                         return
                     else:
