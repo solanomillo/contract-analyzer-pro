@@ -244,8 +244,10 @@ class ConfigWindow:
                 self.root.after(0, lambda: self._set_modelos(chat, emb))
             except Exception as e:
                 error_msg = str(e)
-                if "API key" in error_msg or "key" in error_msg.lower():
-                    self.root.after(0, lambda: self._error("API key invalida o no configurada"))
+                if "No hay API key" in error_msg:
+                    self.root.after(0, lambda: self._error("API key no encontrada. Vuelve a validar."))
+                elif "503" in error_msg or "UNAVAILABLE" in error_msg:
+                    self.root.after(0, lambda: self._error("Servicio de Gemini saturado. Intenta mas tarde."))
                 else:
                     self.root.after(0, lambda: self._error(f"Error cargando modelos: {error_msg[:100]}"))
 
