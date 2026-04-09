@@ -37,6 +37,8 @@ class RiskDetectionAgent(BaseAgent):
         - texto_relevante: string (la frase exacta)
         - recomendacion: string (que deberia hacer la parte)
         
+        IMPORTANTE: Para preguntas sobre penalizaciones, enfocate en el porcentaje o monto exacto.
+        
         Si no encuentras nada, devuelve: []
         """
         

@@ -36,6 +36,8 @@ class ObligationAgent(BaseAgent):
         - texto_relevante: string (la frase exacta)
         - recomendacion: string (como cumplir con la obligacion)
         
+        IMPORTANTE: Para preguntas sobre cuanto pagar, enfocate en el monto exacto.
+        
         Si no encuentras obligaciones, devuelve: []
         """
         

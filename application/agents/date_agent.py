@@ -36,6 +36,8 @@ class DateExtractionAgent(BaseAgent):
         - texto_relevante: string (la frase exacta)
         - recomendacion: string (que accion tomar)
         
+        IMPORTANTE: Para preguntas sobre fechas, proporciona las fechas exactas.
+        
         Si no encuentras fechas, devuelve: []
         """
         

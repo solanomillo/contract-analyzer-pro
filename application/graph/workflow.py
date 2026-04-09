@@ -1,5 +1,6 @@
 """
 Workflow de agentes usando LangGraph.
+Router decide qué agente usar según la consulta.
 """
 
 import logging
@@ -32,6 +33,9 @@ class EstadoAnalisis(TypedDict):
 
 
 class AnalisisWorkflow:
+    """
+    Workflow para analisis de contratos.
+    """
     
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key
@@ -89,24 +93,57 @@ class AnalisisWorkflow:
         
         logger.info(f"Router evaluando consulta: '{consulta}'")
         
-        palabras_completo = ["analizar", "completo", "todos", "analisis legal", "que opinas"]
-        palabras_riesgo = ["penalizacion", "multa", "riesgo", "clausula", "rescicion", "terminacion"]
-        palabras_fechas = ["fecha", "vencimiento", "plazo", "renovacion", "termina", "inicia", "vigencia"]
-        palabras_obligaciones = ["pago", "obligacion", "debe", "abonara", "monto", "precio"]
+        # Palabras clave para analisis completo
+        palabras_completo = [
+            "analizar", "completo", "todos", "analisis legal", "que opinas",
+            "resumen", "general", "evalua", "revisa"
+        ]
         
-        if any(p in consulta for p in palabras_completo):
-            logger.info("=== ROUTER: Usando agente COMPLETO ===")
-            return "completo"
-        if any(p in consulta for p in palabras_riesgo):
-            logger.info("=== ROUTER: Usando agente de RIESGOS ===")
-            return "riesgo"
-        if any(p in consulta for p in palabras_fechas):
-            logger.info("=== ROUTER: Usando agente de FECHAS ===")
-            return "fechas"
+        # Palabras clave para riesgos
+        palabras_riesgo = [
+            "penalizacion", "multa", "riesgo", "clausula", "rescicion",
+            "terminacion", "responsabilidad", "exclusividad", "peligrosa",
+            "incumplimiento", "sancion", "penalización"
+        ]
+        
+        # Palabras clave para fechas
+        palabras_fechas = [
+            "fecha", "vencimiento", "plazo", "renovacion", "dias",
+            "meses", "anios", "termina", "inicia", "vigencia", "duracion",
+            "comienza", "finaliza", "cuando"
+        ]
+        
+        # Palabras clave para obligaciones
+        palabras_obligaciones = [
+            "pago", "obligacion", "debe", "abonara", "pagara",
+            "monto", "precio", "costo", "honorarios", "abonar",
+            "cuanto", "mensual", "mensualmente", "valor", "total",
+            "servicios", "luz", "agua", "gas", "mantener", "cuidar",
+            "responsabilidad", "cargo", "locatario", "inquilino"
+        ]
+        
+        # Detectar analisis completo (solo si es explicitamente general)
+        if any(p in consulta for p in palabras_completo) and len(consulta.split()) < 5:
+            if consulta in ["analizar", "completo", "todos", "resumen"]:
+                logger.info("=== ROUTER: Usando agente COMPLETO ===")
+                return "completo"
+        
+        # Detectar OBLIGACIONES primero
         if any(p in consulta for p in palabras_obligaciones):
             logger.info("=== ROUTER: Usando agente de OBLIGACIONES ===")
             return "obligaciones"
         
+        # Detectar RIESGOS
+        if any(p in consulta for p in palabras_riesgo):
+            logger.info("=== ROUTER: Usando agente de RIESGOS ===")
+            return "riesgo"
+        
+        # Detectar FECHAS
+        if any(p in consulta for p in palabras_fechas):
+            logger.info("=== ROUTER: Usando agente de FECHAS ===")
+            return "fechas"
+        
+        # Por defecto
         logger.info("=== ROUTER: Consulta general, usando agente COMPLETO ===")
         return "completo"
     
@@ -172,12 +209,10 @@ class AnalisisWorkflow:
         hallazgos = estado.get("hallazgos", [])
         agente = estado.get("agente_usado", "")
         
-        # Detectar error
         if hallazgos and hallazgos[0].get("tipo") == "error":
             estado["resumen"] = ResponseFormatter.format_error(hallazgos[0].get("descripcion", "Error desconocido"))
             return estado
         
-        # Usar el formateador centralizado segun el agente
         if agente == "fechas":
             estado["resumen"] = ResponseFormatter.format_fechas(hallazgos)
         elif agente == "riesgo":
