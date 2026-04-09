@@ -1,6 +1,6 @@
 """
 Ventana principal de la aplicacion.
-Version simplificada: solo preguntas y analisis completo.
+Version simplificada: preguntas, texto del contrato y analisis completo.
 """
 
 import logging
@@ -117,12 +117,12 @@ class MainWindow:
         left_column.grid_columnconfigure(0, weight=1)
         self._build_upload_area(left_column)
         
-        # Columna derecha - Preguntas y Analisis
+        # Columna derecha - Pestañas
         right_column = ctk.CTkFrame(content_frame, fg_color="transparent")
         right_column.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         right_column.grid_rowconfigure(0, weight=1)
         right_column.grid_columnconfigure(0, weight=1)
-        self._build_right_area(right_column)
+        self._build_tab_area(right_column)
         
         # Footer
         self._build_footer(main_frame)
@@ -188,30 +188,54 @@ class MainWindow:
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(anchor="w", padx=20, pady=(15, 10))
         
-        self.info_text = ctk.CTkTextbox(info_card, wrap="word")
+        self.info_text = ctk.CTkTextbox(info_card, wrap="word", height=120)
         self.info_text.pack(fill="both", expand=True, padx=20, pady=(0, 20))
         self.info_text.insert("1.0", "Esperando carga de documento...")
         self.info_text.configure(state="disabled")
     
-    def _build_right_area(self, parent):
-        """Construye el area derecha (preguntas + analisis)."""
+    def _build_tab_area(self, parent):
+        """Construye el area de pestañas."""
         
-        # Pestañas
         tabview = ctk.CTkTabview(parent)
         tabview.pack(fill="both", expand=True)
         
-        # Pestaña de preguntas
+        # Pestaña 1: Texto del Contrato
+        tab_texto = tabview.add("Texto del Contrato")
+        self._build_text_tab(tab_texto)
+        
+        # Pestaña 2: Preguntar al Contrato
         tab_preguntas = tabview.add("Preguntar al Contrato")
         self._build_qa_tab(tab_preguntas)
         
-        # Pestaña de analisis
+        # Pestaña 3: Analisis Legal
         tab_analisis = tabview.add("Analisis Legal")
         self._build_analysis_tab(tab_analisis)
+    
+    def _build_text_tab(self, parent):
+        """Construye la pestaña de texto del contrato."""
+        self.progress_card = ProgressCard(parent)
+        self.progress_card.hide()
+        
+        self.preview_text = ctk.CTkTextbox(parent, wrap="word")
+        self.preview_text.pack(fill="both", expand=True, padx=10, pady=10)
+        self.preview_text.insert("1.0", "El texto del contrato aparecera aqui...")
+        self.preview_text.configure(state="disabled")
+        
+        stats_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        stats_frame.pack(fill="x", padx=10, pady=(0, 10))
+        
+        self.stats_label = ctk.CTkLabel(
+            stats_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="#888888"
+        )
+        self.stats_label.pack()
     
     def _build_qa_tab(self, parent):
         """Construye la pestaña de preguntas y respuestas."""
         qa_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        qa_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        qa_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
         ctk.CTkLabel(
             qa_frame,
@@ -250,22 +274,11 @@ class MainWindow:
         self.answer_text.pack(fill="x", pady=(0, 10))
         self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
         self.answer_text.configure(state="disabled")
-        
-        ctk.CTkLabel(
-            qa_frame,
-            text="Contexto utilizado:",
-            font=ctk.CTkFont(size=12, weight="bold")
-        ).pack(anchor="w", pady=(5, 5))
-        
-        self.context_text = ctk.CTkTextbox(qa_frame, height=120, wrap="word")
-        self.context_text.pack(fill="x")
-        self.context_text.insert("1.0", "El contexto usado aparecera aqui...")
-        self.context_text.configure(state="disabled")
     
     def _build_analysis_tab(self, parent):
         """Construye la pestaña de analisis legal."""
         analysis_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        analysis_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        analysis_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
         ctk.CTkLabel(
             analysis_frame,
@@ -275,9 +288,17 @@ class MainWindow:
         
         ctk.CTkLabel(
             analysis_frame,
-            text="Genera un analisis completo del contrato, incluyendo riesgos, fechas y obligaciones.",
+            text="Genera un analisis completo del contrato, incluyendo:",
             font=ctk.CTkFont(size=12),
             text_color="#888888"
+        ).pack(anchor="w", pady=(0, 5))
+        
+        ctk.CTkLabel(
+            analysis_frame,
+            text="• Riesgos y clausulas peligrosas\n• Fechas importantes (inicio, termino, plazos)\n• Obligaciones de pago y condiciones",
+            font=ctk.CTkFont(size=12),
+            text_color="#888888",
+            justify="left"
         ).pack(anchor="w", pady=(0, 15))
         
         btn_analysis_frame = ctk.CTkFrame(analysis_frame, fg_color="transparent")
@@ -289,8 +310,8 @@ class MainWindow:
             command=self._start_analysis,
             width=220,
             height=45,
-            fg_color="#2ecc71",
-            hover_color="#27ae60",
+            fg_color="#3498db",  # Azul
+            hover_color="#2980b9",
             font=ctk.CTkFont(size=13, weight="bold"),
             state="disabled"
         )
@@ -301,14 +322,13 @@ class MainWindow:
         self.analysis_progress.set(0)
         self.analysis_progress.pack_forget()
         
-        # Resultados del analisis
         ctk.CTkLabel(
             analysis_frame,
-            text="Resultados:",
+            text="Resultados del Analisis:",
             font=ctk.CTkFont(size=14, weight="bold")
         ).pack(anchor="w", pady=(20, 5))
         
-        self.analysis_text = ctk.CTkTextbox(analysis_frame, wrap="word", height=400)
+        self.analysis_text = ctk.CTkTextbox(analysis_frame, wrap="word", height=350)
         self.analysis_text.pack(fill="both", expand=True, pady=(0, 10))
         self.analysis_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
         self.analysis_text.configure(state="disabled")
@@ -382,15 +402,8 @@ class MainWindow:
         """Procesa el PDF."""
         self.is_processing = True
         self.file_upload.set_loading(True)
-        
-        # Crear barra de progreso temporal
-        self.progress_frame = ctk.CTkFrame(self.root)
-        self.progress_frame.pack(side="bottom", fill="x", padx=20, pady=10)
-        self.progress_bar = ctk.CTkProgressBar(self.progress_frame, width=400)
-        self.progress_bar.pack(pady=5)
-        self.progress_bar.set(0.1)
-        self.progress_label = ctk.CTkLabel(self.progress_frame, text="Iniciando procesamiento...")
-        self.progress_label.pack()
+        self.progress_card.show()
+        self.progress_card.update_progress(0.1, "Iniciando procesamiento...", "")
         
         def on_progress(mensaje: str):
             self.root.after(0, lambda: self._update_progress(mensaje))
@@ -409,8 +422,7 @@ class MainWindow:
         )
     
     def _update_progress(self, mensaje: str):
-        self.progress_bar.set(0.5)
-        self.progress_label.configure(text=mensaje)
+        self.progress_card.update_progress(0.5, mensaje, "")
         self.status_label.configure(text=f"Procesando: {mensaje}")
     
     def _on_process_complete(self, resultado: dict):
@@ -418,15 +430,15 @@ class MainWindow:
         self.is_processing = False
         
         self.file_upload.set_success(resultado["nombre_archivo"])
-        self.progress_bar.set(1.0)
-        self.progress_label.configure(text="Indexando...")
+        self.progress_card.update_progress(1.0, "Indexando...", "")
         
         try:
             self.status_label.configure(text="Indexando...")
             index_result = self.rag_service.index_contract(resultado)
             
             if index_result.get("estado") == "exito":
-                self.progress_label.configure(text="Procesamiento completado!")
+                self.progress_card.update_progress(1.0, "Completado!", 
+                                                   f"Indexados {index_result['chunks_indexados']} chunks")
                 self.status_label.configure(text="Documento procesado")
                 
                 self.btn_ask.configure(state="normal")
@@ -441,13 +453,12 @@ class MainWindow:
         self._update_contract_info(resultado)
         self._update_preview(resultado)
         
-        # Ocultar progreso
-        self.root.after(2000, lambda: self.progress_frame.pack_forget())
+        self.root.after(2000, self.progress_card.hide)
     
     def _on_process_error(self, error: str):
         self.is_processing = False
         self.file_upload.set_loading(False)
-        self.progress_frame.pack_forget()
+        self.progress_card.hide()
         self.status_label.configure(text="Error")
         
         if "503" in error or "UNAVAILABLE" in error:
@@ -469,7 +480,20 @@ Chunks: {resultado['total_chunks']}"""
         self.info_text.configure(state="disabled")
     
     def _update_preview(self, resultado: dict):
-        pass  # No necesitamos preview de texto
+        """Actualiza el preview del texto en la pestaña Texto del Contrato."""
+        self.preview_text.configure(state="normal")
+        self.preview_text.delete("1.0", "end")
+        
+        texto = resultado['texto_completo'][:5000]
+        if len(resultado['texto_completo']) > 5000:
+            texto += "\n\n... [texto truncado]"
+        
+        self.preview_text.insert("1.0", texto)
+        self.preview_text.configure(state="disabled")
+        
+        self.stats_label.configure(
+            text=f"Total: {resultado['total_caracteres']} caracteres | {resultado['total_chunks']} chunks"
+        )
     
     def _ask_question(self):
         """Realiza una pregunta sobre el contrato."""
@@ -666,15 +690,15 @@ Chunks: {resultado['total_chunks']}"""
         self.info_text.insert("1.0", "Esperando carga...")
         self.info_text.configure(state="disabled")
         
+        self.preview_text.configure(state="normal")
+        self.preview_text.delete("1.0", "end")
+        self.preview_text.insert("1.0", "El texto del contrato aparecera aqui...")
+        self.preview_text.configure(state="disabled")
+        
         self.answer_text.configure(state="normal")
         self.answer_text.delete("1.0", "end")
         self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
         self.answer_text.configure(state="disabled")
-        
-        self.context_text.configure(state="normal")
-        self.context_text.delete("1.0", "end")
-        self.context_text.insert("1.0", "El contexto aparecera aqui...")
-        self.context_text.configure(state="disabled")
         
         self.analysis_text.configure(state="normal")
         self.analysis_text.delete("1.0", "end")
@@ -684,6 +708,7 @@ Chunks: {resultado['total_chunks']}"""
         self.question_entry.delete("1.0", "end")
         self.question_entry.insert("1.0", "Ejemplo: Cuanto es el pago mensual?")
         
+        self.stats_label.configure(text="")
         self.status_label.configure(text="Sistema listo")
         
         self.btn_ask.configure(state="disabled")
@@ -692,6 +717,7 @@ Chunks: {resultado['total_chunks']}"""
         
         self.file_upload.reset_state()
         self.file_upload.set_loading(False)
+        self.progress_card.hide()
         
         messagebox.showinfo("Limpieza", "Contrato eliminado. Puedes cargar otro.")
     
