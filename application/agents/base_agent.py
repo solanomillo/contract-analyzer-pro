@@ -19,17 +19,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Hallazgo:
-    """
-    Representa un hallazgo encontrado por un agente.
-    
-    Attributes:
-        tipo: Tipo de hallazgo (penalizacion, rescision, etc.)
-        descripcion: Descripcion detallada del hallazgo
-        riesgo: Nivel de riesgo (ALTO, MEDIO, BAJO)
-        texto_relevante: Texto original donde se encontro
-        recomendacion: Recomendacion para el usuario
-        ubicacion: Ubicacion en el contrato (opcional)
-    """
     tipo: str
     descripcion: str
     riesgo: str
@@ -38,7 +27,6 @@ class Hallazgo:
     ubicacion: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convierte el hallazgo a diccionario."""
         return {
             "tipo": self.tipo,
             "descripcion": self.descripcion,
@@ -50,47 +38,23 @@ class Hallazgo:
 
 
 class BaseAgent(ABC):
-    """
-    Clase base abstracta para todos los agentes.
-    """
+    """Clase base abstracta para todos los agentes."""
     
     def __init__(self, api_key: Optional[str] = None):
         self.client = GeminiClient(api_key=api_key)
         self._ultimo_error: Optional[str] = None
-        # Cargar modelo desde .env
         load_dotenv()
         self.modelo_predeterminado = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-        logger.info(f"Inicializando agente: {self.__class__.__name__} con modelo: {self.modelo_predeterminado}")
+        logger.info(f"Inicializando {self.__class__.__name__} con modelo: {self.modelo_predeterminado}")
     
     def get_ultimo_error(self) -> Optional[str]:
-        """Retorna el ultimo error ocurrido."""
         return self._ultimo_error
     
     @abstractmethod
     def analizar(self, texto: str, contexto: Optional[str] = None) -> List[Hallazgo]:
-        """
-        Analiza el texto y retorna hallazgos.
-        
-        Args:
-            texto: Texto a analizar
-            contexto: Contexto adicional (opcional)
-            
-        Returns:
-            Lista de hallazgos encontrados
-        """
         pass
     
     def _call_llm(self, prompt: str, modelo: Optional[str] = None) -> str:
-        """
-        Realiza una llamada al LLM de Gemini con manejo de errores.
-        
-        Args:
-            prompt: Prompt para el LLM
-            modelo: Modelo a usar (si no se especifica, usa el de configuracion)
-            
-        Returns:
-            Respuesta del LLM o cadena vacia si hay error
-        """
         if modelo is None:
             modelo = self.modelo_predeterminado
         
@@ -103,7 +67,7 @@ class BaseAgent(ABC):
             )
             
             if response is None:
-                self._ultimo_error = f"El servicio de Gemini no respondio. Intenta de nuevo. Modelo: {modelo}"
+                self._ultimo_error = f"El servicio de Gemini no respondio. Modelo: {modelo}"
                 logger.error(self._ultimo_error)
                 return ""
             
@@ -113,7 +77,7 @@ class BaseAgent(ABC):
         except Exception as e:
             error_msg = str(e)
             if "503" in error_msg or "UNAVAILABLE" in error_msg:
-                self._ultimo_error = f"Servicio de Gemini saturado. Espera unos minutos o cambia a gemini-2.0-flash en la configuracion. Modelo usado: {modelo}"
+                self._ultimo_error = "Servicio de Gemini saturado. Espera unos minutos o cambia a gemini-2.0-flash."
             elif "quota" in error_msg.lower():
                 self._ultimo_error = "Cuota de API agotada. Cambia tu API key."
             elif "invalid" in error_msg.lower():
@@ -121,22 +85,12 @@ class BaseAgent(ABC):
             else:
                 self._ultimo_error = f"Error en Gemini: {error_msg[:100]}"
             
-            logger.error(f"Error llamando a Gemini con modelo {modelo}: {error_msg}")
+            logger.error(f"Error llamando a Gemini: {error_msg}")
             return ""
     
     def _parsear_respuesta_json(self, respuesta: str) -> List[Dict[str, Any]]:
-        """
-        Parsea la respuesta del LLM a formato JSON.
-        
-        Args:
-            respuesta: Respuesta del LLM
-            
-        Returns:
-            Lista de diccionarios con los hallazgos
-        """
         if not respuesta:
             return []
-        
         try:
             json_match = re.search(r'\[.*\]', respuesta, re.DOTALL)
             if json_match:
@@ -147,15 +101,6 @@ class BaseAgent(ABC):
             return []
     
     def _crear_hallazgo(self, datos: Dict[str, Any]) -> Hallazgo:
-        """
-        Crea un objeto Hallazgo desde un diccionario.
-        
-        Args:
-            datos: Diccionario con los datos del hallazgo
-            
-        Returns:
-            Objeto Hallazgo
-        """
         return Hallazgo(
             tipo=datos.get("tipo", "desconocido"),
             descripcion=datos.get("descripcion", ""),

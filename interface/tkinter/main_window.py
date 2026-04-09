@@ -19,8 +19,7 @@ from application.services.config_service import ConfigService
 from application.services.rag_service import RAGService
 from application.graph.workflow import AnalisisWorkflow
 from application.services.pdf_export_service import PDFExportService
-from interface.tkinter.config_window import ConfigWindow
-from application.graph.workflow import AnalisisWorkflow
+
 logger = logging.getLogger(__name__)
 
 
@@ -363,11 +362,10 @@ class MainWindow:
         self.analysis_progress.pack_forget()
     
     def _build_results_tab(self, parent):
-        """Construye la pestaña de resultados - SOLO resumen ejecutivo."""
+        """Construye la pestaña de resultados."""
         results_frame = ctk.CTkScrollableFrame(parent)
         results_frame.pack(fill="both", expand=True)
         
-        # Un solo card para todos los resultados
         main_card = crear_card(results_frame)
         main_card.pack(fill="x", pady=(0, 15))
         
@@ -417,11 +415,12 @@ class MainWindow:
         self.btn_export.pack(side="left", padx=(10, 0))
     
     def _cambiar_api_key(self):
-        """Abre ventana modal de configuracion (no cierra la app)."""        
+        """Abre ventana modal de configuracion."""
+        from interface.tkinter.config_window import ConfigWindow
         
         def on_config_saved():
             """Callback cuando se guarda la configuracion."""
-            # Recargar workflow con nueva configuracion            
+            from application.graph.workflow import AnalisisWorkflow
             api_key = self.config_service.get_api_key()
             self.workflow = AnalisisWorkflow(api_key=api_key)
             self.status_label.configure(text="Configuracion actualizada")
@@ -540,58 +539,6 @@ Chunks: {resultado['total_chunks']}"""
         self.preview_text.configure(state="disabled")
         self.stats_label.configure(text=f"Total: {resultado['total_caracteres']} caracteres | {resultado['total_chunks']} chunks")
     
-    def _generar_respuesta_especifica(self, pregunta: str, resultado: dict) -> str:
-        """Genera una respuesta especifica sin emojis ni formato."""
-        pregunta_lower = pregunta.lower()
-        hallazgos = resultado.get("hallazgos", [])
-        
-        if hallazgos and hallazgos[0].get("tipo") == "error":
-            return f"Error: {hallazgos[0].get('descripcion', 'Error desconocido')}\n\nRecomendacion: {hallazgos[0].get('recomendacion', '')}"
-        
-        if not hallazgos:
-            return "No se encontro informacion relevante en el contrato para responder a tu pregunta."
-        
-        # Penalizaciones
-        if "penalizacion" in pregunta_lower or "multa" in pregunta_lower or "penalización" in pregunta_lower:
-            for h in hallazgos:
-                if "penalizacion" in h.get("tipo", "").lower():
-                    return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-            for h in hallazgos:
-                if "penalización" in h.get("descripcion", "").lower() or "incumplimiento" in h.get("descripcion", "").lower():
-                    return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-        
-        # Rescision
-        if any(p in pregunta_lower for p in ["rescindir", "terminar", "cancelar", "rescisión", "terminación"]):
-            for h in hallazgos:
-                if "rescision" in h.get("tipo", "").lower():
-                    return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-        
-        # Fechas
-        if any(p in pregunta_lower for p in ["fecha", "vencimiento", "plazo", "comienza", "termina", "inicia", "dura"]):
-            for h in hallazgos:
-                if "fecha" in h.get("tipo", "").lower():
-                    return f"Respuesta:\n\n{h.get('descripcion', '')}"
-        
-        # Pagos
-        if any(p in pregunta_lower for p in ["pago", "precio", "costo", "monto", "abonar", "pagar"]):
-            for h in hallazgos:
-                if "pago" in h.get("tipo", "").lower():
-                    return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-        
-        # Un solo hallazgo
-        if len(hallazgos) == 1:
-            h = hallazgos[0]
-            return f"Respuesta:\n\n{h.get('descripcion', '')}\n\nRecomendacion:\n{h.get('recomendacion', '')}"
-        
-        # Respuesta general
-        respuesta = "Respuesta:\n\n"
-        for i, h in enumerate(hallazgos[:3], 1):
-            respuesta += f"{i}. {h.get('descripcion', '')}\n"
-            if h.get('recomendacion'):
-                respuesta += f"   Recomendacion: {h.get('recomendacion', '')}\n\n"
-        
-        return respuesta if len(respuesta) > 20 else "No se encontro informacion especifica para tu pregunta."
-
     def _extraer_contexto_resumido(self, resultado: dict) -> str:
         """Extrae un contexto resumido para mostrar."""
         hallazgos = resultado.get("hallazgos", [])
@@ -631,6 +578,8 @@ Chunks: {resultado['total_chunks']}"""
         
         self.qa_progress.pack(side="left", padx=(10, 0))
         self.qa_progress.set(0.2)
+        
+        logger.info(f"Pregunta: '{pregunta}'")
 
         def task():
             for intento in range(3):
@@ -640,7 +589,7 @@ Chunks: {resultado['total_chunks']}"""
 
                     self.root.after(0, lambda: self.qa_progress.set(0.5))
                     self.root.after(0, lambda: self.status_label.configure(
-                        text=f"Procesando pregunta (intento {intento+1}/3)..."
+                        text=f"Procesando (intento {intento+1}/3)..."
                     ))
 
                     resultado = self.workflow.ejecutar_sync(
@@ -649,7 +598,7 @@ Chunks: {resultado['total_chunks']}"""
                     )
 
                     if resultado.get("exito"):
-                        respuesta = self._generar_respuesta_especifica(pregunta, resultado)
+                        respuesta = resultado.get("resumen", "No se obtuvo respuesta")
                         contexto = self._extraer_contexto_resumido(resultado)
                         self.root.after(0, lambda: self._show_answer(respuesta, contexto))
                         return
@@ -658,13 +607,13 @@ Chunks: {resultado['total_chunks']}"""
 
                 except Exception as e:
                     error = str(e)
-                    logger.error(f"Error en pregunta: {error}")
+                    logger.error(f"Error: {error}")
 
                     if "503" in error or "UNAVAILABLE" in error or "high demand" in error.lower():
                         if intento < 2:
                             time.sleep(2 * (intento + 1))
                             continue
-                        respuesta = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos. Se recomienda cambiar a gemini-2.0-flash en la configuracion."
+                        respuesta = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
                     elif "quota" in error.lower() or "exceeded" in error.lower():
                         respuesta = "Cuota de API agotada. Cambia tu API key."
                     else:
@@ -717,11 +666,8 @@ Chunks: {resultado['total_chunks']}"""
         self.analysis_progress.pack(side="left", padx=(10, 0))
         self.analysis_progress.set(0.2)
         
-        # Obtener el tipo de analisis seleccionado
         analysis_type = self.analysis_type_var.get()
         
-        # Mapear el tipo de analisis a la consulta correcta para el router
-        # Esto asegura que se use el agente correspondiente
         consulta_map = {
             "completo": "analizar contrato completo",
             "riesgo": "analizar solo riesgos y clausulas peligrosas",
@@ -731,8 +677,7 @@ Chunks: {resultado['total_chunks']}"""
         
         consulta = consulta_map.get(analysis_type, "analizar contrato completo")
         
-        logger.info(f"Iniciando analisis de tipo: {analysis_type} -> Consulta: {consulta}")
-        logger.info(f"El router usara el agente correspondiente a: {analysis_type}")
+        logger.info(f"Analisis tipo: {analysis_type} -> Consulta: {consulta}")
 
         def task():
             for intento in range(3):
@@ -742,7 +687,7 @@ Chunks: {resultado['total_chunks']}"""
 
                     self.root.after(0, lambda: self.analysis_progress.set(0.5))
                     self.root.after(0, lambda: self.status_label.configure(
-                        text=f"Analizando contrato (intento {intento+1}/3)..."
+                        text=f"Analizando (intento {intento+1}/3)..."
                     ))
 
                     resultado = self.workflow.ejecutar_sync(
@@ -751,9 +696,8 @@ Chunks: {resultado['total_chunks']}"""
                     )
 
                     if resultado.get("exito"):
-                        agente_usado = resultado.get("agente_usado", "desconocido")
-                        logger.info(f"Analisis completado usando agente: {agente_usado}")
-                        self.root.after(0, lambda: self._show_analysis_results(resultado))
+                        respuesta = resultado.get("resumen", "No se obtuvo respuesta")
+                        self.root.after(0, lambda: self._show_analysis_results(respuesta))
                         return
                     else:
                         raise Exception(resultado.get("error", "Error desconocido"))
@@ -766,7 +710,7 @@ Chunks: {resultado['total_chunks']}"""
                         if intento < 2:
                             time.sleep(2 * (intento + 1))
                             continue
-                        error_msg = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos. Se recomienda cambiar a gemini-2.0-flash en la configuracion."
+                        error_msg = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
                     elif "quota" in error.lower() or "exceeded" in error.lower():
                         error_msg = "Cuota de API agotada. Cambia tu API key."
                     else:
@@ -788,84 +732,11 @@ Chunks: {resultado['total_chunks']}"""
         self.status_label.configure(text="Listo")
         self.is_analyzing = False
     
-    def _show_analysis_results(self, resultado: dict):
+    def _show_analysis_results(self, resumen: str):
         """Muestra los resultados del analisis."""
-        
-        hallazgos = resultado.get("hallazgos", [])
-        
-        hay_error = any(h.get("tipo") == "error" for h in hallazgos)
-        
-        if hay_error:
-            mensaje_error = "ERROR EN EL ANALISIS\n\n"
-            for h in hallazgos:
-                if h.get("tipo") == "error":
-                    mensaje_error += f"{h.get('descripcion', '')}\n"
-                    mensaje_error += f"Recomendacion: {h.get('recomendacion', '')}\n\n"
-            
-            self.summary_text.configure(state="normal")
-            self.summary_text.delete("1.0", "end")
-            self.summary_text.insert("1.0", mensaje_error)
-            self.summary_text.configure(state="disabled")
-            
-            self.status_label.configure(text="Error en analisis")
-            self.btn_analyze.configure(state="normal", text="Iniciar Analisis")
-            self.is_analyzing = False
-            self.analysis_progress.pack_forget()
-            
-            messagebox.showerror("Error de Analisis", mensaje_error)
-            return
-        
-        altos = []
-        medios = []
-        bajos = []
-        
-        for h in hallazgos:
-            riesgo = h.get("riesgo", "MEDIO")
-            texto = f"""* {h.get('descripcion', '')}
-  Texto: "{h.get('texto_relevante', '')}"
-  Recomendacion: {h.get('recomendacion', '')}
-
-"""
-            if riesgo == "ALTO":
-                altos.append(texto)
-            elif riesgo == "MEDIO":
-                medios.append(texto)
-            else:
-                bajos.append(texto)
-        
-        resumen_completo = []
-        resumen_completo.append("=" * 60)
-        resumen_completo.append("RESULTADOS DEL ANALISIS LEGAL")
-        resumen_completo.append("=" * 60)
-        resumen_completo.append(f"\nAgente utilizado: {resultado.get('agente_usado', 'desconocido')}")
-        
-        resumen_completo.append(f"\n{'=' * 60}")
-        resumen_completo.append(f"RIESGOS ALTOS ({len(altos)})")
-        resumen_completo.append("=" * 60)
-        if altos:
-            resumen_completo.extend(altos)
-        else:
-            resumen_completo.append("No se detectaron riesgos altos\n")
-        
-        resumen_completo.append(f"\n{'=' * 60}")
-        resumen_completo.append(f"RIESGOS MEDIOS ({len(medios)})")
-        resumen_completo.append("=" * 60)
-        if medios:
-            resumen_completo.extend(medios)
-        else:
-            resumen_completo.append("No se detectaron riesgos medios\n")
-        
-        resumen_completo.append(f"\n{'=' * 60}")
-        resumen_completo.append(f"RIESGOS BAJOS / INFORMATIVOS ({len(bajos)})")
-        resumen_completo.append("=" * 60)
-        if bajos:
-            resumen_completo.extend(bajos)
-        else:
-            resumen_completo.append("No se detectaron riesgos bajos\n")
-        
         self.summary_text.configure(state="normal")
         self.summary_text.delete("1.0", "end")
-        self.summary_text.insert("1.0", "\n".join(resumen_completo))
+        self.summary_text.insert("1.0", resumen)
         self.summary_text.configure(state="disabled")
         
         self.btn_export.configure(state="normal")
@@ -875,16 +746,7 @@ Chunks: {resultado['total_chunks']}"""
         self.is_analyzing = False
         self.analysis_progress.pack_forget()
         
-        altos_count = len(altos)
-        medios_count = len(medios)
-        bajos_count = len(bajos)
-        
-        messagebox.showinfo("Analisis Completado", 
-                           f"Analisis finalizado.\n\n"
-                           f"Riesgos Altos: {altos_count}\n"
-                           f"Riesgos Medios: {medios_count}\n"
-                           f"Riesgos Bajos: {bajos_count}\n\n"
-                           f"Los detalles completos estan en la pestaña de Resultados.")
+        messagebox.showinfo("Analisis Completado", "El analisis ha finalizado. Los resultados estan en la pestaña Resultados.")
     
     def _show_analysis_error(self, error: str):
         """Muestra error en el analisis."""
@@ -931,12 +793,11 @@ Chunks: {resultado['total_chunks']}"""
                 
                 messagebox.showinfo(
                     "Exportacion Exitosa", 
-                    f"Analisis exportado a PDF:\n\n{pdf_path}\n\n"
-                    "El archivo se ha guardado correctamente."
+                    f"Analisis exportado a PDF:\n\n{pdf_path}"
                 )
             except Exception as e:
-                logger.error(f"Error exportando a PDF: {e}")
-                messagebox.showerror("Error", f"No se pudo exportar el analisis:\n\n{e}")
+                logger.error(f"Error exportando: {e}")
+                messagebox.showerror("Error", f"No se pudo exportar:\n\n{e}")
     
     def _on_clear(self):
         """Limpia el contrato actual."""
