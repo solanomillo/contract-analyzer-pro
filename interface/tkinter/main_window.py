@@ -640,6 +640,9 @@ Chunks: {resultado['total_chunks']}"""
         self.analysis_text.delete("1.0", "end")
         self.analysis_text.insert("1.0", f"Error en el analisis:\n\n{error}")
         self.analysis_text.configure(state="disabled")
+        self.btn_analyze.configure(state="normal", text="Generar Analisis Completo")
+        self.is_analyzing = False
+        self.analysis_progress.pack_forget() 
         self.status_label.configure(text="Error en analisis")
     
     def _export_analysis(self):
