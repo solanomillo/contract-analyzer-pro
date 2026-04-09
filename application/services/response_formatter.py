@@ -14,81 +14,62 @@ class ResponseFormatter:
     
     @staticmethod
     def format_fechas(hallazgos: List[Dict[str, Any]]) -> str:
-        """Formatea respuestas del agente de fechas - RESPUESTA CONCRETA."""
+        """Formatea respuestas del agente de fechas - SOLO TEXTO CONCRETO."""
         if not hallazgos:
             return "No se encontraron fechas importantes en el contrato."
         
-        respuesta = "Respuesta:\n\n"
-        
+        # Buscar la fecha mas relevante segun la pregunta implicita
         for h in hallazgos:
             tipo = h.get("tipo", "")
             descripcion = h.get("descripcion", "")
             
             if tipo == "inicio":
-                respuesta += f"El contrato comienza: {descripcion}\n"
+                return f"{descripcion}"
             elif tipo == "termino":
-                respuesta += f"El contrato termina: {descripcion}\n"
+                return f"{descripcion}"
             elif tipo == "plazo_pago":
-                respuesta += f"Plazo de pago: {descripcion}\n"
-            elif tipo == "preaviso":
-                respuesta += f"Preaviso requerido: {descripcion}\n"
-            else:
-                respuesta += f"• {descripcion}\n"
+                return f"{descripcion}"
         
-        return respuesta.strip()
+        # Si no encuentra tipo especifico, devolver el primero
+        return f"{hallazgos[0].get('descripcion', '')}"
     
     @staticmethod
     def format_riesgos(hallazgos: List[Dict[str, Any]]) -> str:
-        """Formatea respuestas del agente de riesgos - RESPUESTA CONCRETA."""
+        """Formatea respuestas del agente de riesgos - SOLO TEXTO CONCRETO."""
         if not hallazgos:
             return "No se encontraron clausulas de riesgo en el contrato."
         
-        respuesta = "Respuesta:\n\n"
-        
-        # Mostrar riesgos altos primero
+        # Buscar riesgo ALTO primero
         for h in hallazgos:
             if h.get("riesgo") == "ALTO":
-                respuesta += f"• {h.get('descripcion', '')}\n"
-                if h.get('recomendacion'):
-                    respuesta += f"  Recomendacion: {h.get('recomendacion')}\n"
-                return respuesta
+                return f"{h.get('descripcion', '')}"
         
-        # Si no hay riesgos altos, mostrar el primero
-        if hallazgos:
-            h = hallazgos[0]
-            respuesta += f"• {h.get('descripcion', '')}\n"
-            if h.get('recomendacion'):
-                respuesta += f"  Recomendacion: {h.get('recomendacion')}\n"
-        
-        return respuesta.strip()
+        # Si no hay riesgo ALTO, devolver el primero
+        return f"{hallazgos[0].get('descripcion', '')}"
     
     @staticmethod
     def format_obligaciones(hallazgos: List[Dict[str, Any]]) -> str:
-        """Formatea respuestas del agente de obligaciones - RESPUESTA CONCRETA."""
+        """Formatea respuestas del agente de obligaciones - SOLO TEXTO CONCRETO."""
         if not hallazgos:
             return "No se encontraron obligaciones en el contrato."
         
-        respuesta = "Respuesta:\n\n"
-        
-        # Priorizar informacion de pago
+        # Buscar informacion de pago (monto)
         for h in hallazgos:
             tipo = h.get("tipo", "")
             descripcion = h.get("descripcion", "")
             
-            if "pago" in tipo.lower() or "monto" in descripcion.lower():
-                respuesta += f"{descripcion}\n"
-                if h.get("recomendacion"):
-                    respuesta += f"Recomendacion: {h.get('recomendacion')}\n"
-                return respuesta
+            # Buscar el monto exacto
+            if "$" in descripcion or "pesos" in descripcion.lower():
+                # Extraer solo el monto
+                if "$" in descripcion:
+                    import re
+                    monto_match = re.search(r'\$\s*[\d,]+\.?\d*', descripcion)
+                    if monto_match:
+                        return f"{monto_match.group()}"
+                return f"{descripcion}"
         
-        # Si no hay informacion de pago, mostrar la primera obligacion
-        if hallazgos:
-            h = hallazgos[0]
-            respuesta += f"{h.get('descripcion', '')}\n"
-            if h.get('recomendacion'):
-                respuesta += f"Recomendacion: {h.get('recomendacion')}\n"
-        
-        return respuesta.strip()
+        # Si no encuentra monto, devolver la primera obligacion
+        return f"{hallazgos[0].get('descripcion', '')}"
     
     @staticmethod
     def format_completo(hallazgos: List[Dict[str, Any]]) -> str:
@@ -141,4 +122,4 @@ class ResponseFormatter:
     @staticmethod
     def format_error(mensaje: str) -> str:
         """Formatea mensajes de error."""
-        return f"ERROR:\n\n{mensaje}"
+        return f"ERROR: {mensaje}"

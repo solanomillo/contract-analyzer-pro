@@ -636,10 +636,14 @@ Chunks: {resultado['total_chunks']}"""
         self.is_answering = False
     
     def _show_answer(self, respuesta: str, contexto: str):
-        """Muestra la respuesta en la UI."""
+        """Muestra la respuesta en la UI - sin prefijos adicionales."""
         self.answer_text.configure(state="normal")
         self.answer_text.delete("1.0", "end")
-        self.answer_text.insert("1.0", respuesta)
+        
+        # Limpiar cualquier "Respuesta:" que pueda venir del formateador
+        texto_limpio = respuesta.replace("Respuesta:", "").replace("Respuesta:\n\n", "").strip()
+        
+        self.answer_text.insert("1.0", texto_limpio)
         self.answer_text.configure(state="disabled")
         
         if contexto:
