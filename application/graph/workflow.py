@@ -1,6 +1,6 @@
 """
 Workflow de agentes usando LangGraph.
-Router decide qué agente usar según la consulta y el modo.
+Router decide qué agente usar según la consulta.
 """
 
 import logging
@@ -92,49 +92,59 @@ class AnalisisWorkflow:
         
         logger.info(f"Router evaluando: modo={modo}, consulta='{consulta}'")
         
-        # Si es modo "analisis", siempre usar COMPLETO
-        if modo == "analisis":
-            logger.info("=== ROUTER: Modo analisis, usando agente COMPLETO ===")
-            return "completo"
-        
-        # Modo "pregunta": usar router especifico
+        # Primero, determinar que agente usar basado en la consulta
         # Palabras clave para cada tipo
+        palabras_completo = [
+            "analizar contrato completo", "analisis completo", "completo", "todos",
+            "resumen general", "todo el contrato", "analisis legal"
+        ]
+        
         palabras_riesgo = [
-            "penalizacion", "multa", "riesgo", "clausula", "rescicion",
-            "terminacion", "responsabilidad", "exclusividad", "peligrosa",
-            "incumplimiento", "sancion", "penalización"
+            "solo riesgos", "clausulas peligrosas", "riesgos"
         ]
         
         palabras_fechas = [
-            "fecha", "vencimiento", "plazo", "renovacion", "dias",
-            "meses", "anios", "termina", "inicia", "vigencia", "duracion",
-            "comienza", "finaliza", "cuando"
+            "solo fechas", "fechas importantes", "plazos"
         ]
         
         palabras_obligaciones = [
-            "pago", "obligacion", "debe", "abonara", "pagara",
-            "monto", "precio", "costo", "honorarios", "abonar",
-            "cuanto", "mensual", "mensualmente", "valor", "total",
-            "servicios", "luz", "agua", "gas", "mantener", "cuidar",
-            "responsabilidad", "cargo", "locatario", "inquilino"
+            "solo obligaciones", "obligaciones de pago", "condiciones"
         ]
         
-        # Detectar tipo de pregunta
-        if any(p in consulta for p in palabras_obligaciones):
-            logger.info("=== ROUTER: Modo pregunta -> Usando agente OBLIGACIONES ===")
-            return "obligaciones"
+        # Detectar tipo de analisis por la consulta
+        if any(p in consulta for p in palabras_completo):
+            agente = "completo"
+        elif any(p in consulta for p in palabras_riesgo):
+            agente = "riesgo"
+        elif any(p in consulta for p in palabras_fechas):
+            agente = "fechas"
+        elif any(p in consulta for p in palabras_obligaciones):
+            agente = "obligaciones"
+        else:
+            # Si no se detecta, usar palabras clave de pregunta normal
+            palabras_riesgo_normal = [
+                "penalizacion", "multa", "riesgo", "clausula", "rescicion",
+                "terminacion", "responsabilidad", "exclusividad", "incumplimiento"
+            ]
+            palabras_fechas_normal = [
+                "fecha", "vencimiento", "plazo", "renovacion", "termina", "inicia"
+            ]
+            palabras_obligaciones_normal = [
+                "pago", "obligacion", "monto", "precio", "cuanto", "mensual",
+                "servicios", "mantener"
+            ]
+            
+            if any(p in consulta for p in palabras_obligaciones_normal):
+                agente = "obligaciones"
+            elif any(p in consulta for p in palabras_riesgo_normal):
+                agente = "riesgo"
+            elif any(p in consulta for p in palabras_fechas_normal):
+                agente = "fechas"
+            else:
+                agente = "completo"
         
-        if any(p in consulta for p in palabras_riesgo):
-            logger.info("=== ROUTER: Modo pregunta -> Usando agente RIESGOS ===")
-            return "riesgo"
-        
-        if any(p in consulta for p in palabras_fechas):
-            logger.info("=== ROUTER: Modo pregunta -> Usando agente FECHAS ===")
-            return "fechas"
-        
-        # Si no se detecta tipo especifico, usar COMPLETO
-        logger.info("=== ROUTER: Modo pregunta sin tipo especifico, usando COMPLETO ===")
-        return "completo"
+        logger.info(f"=== ROUTER: Agente seleccionado = {agente.upper()} (modo={modo}) ===")
+        return agente
     
     def _complete_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
         logger.info("Agente Completo: analizando...")
@@ -208,10 +218,10 @@ class AnalisisWorkflow:
         
         # Usar formateador segun el agente y el modo
         if modo == "analisis":
-            # Siempre usar formato completo
+            # En modo analisis, SIEMPRE usar formato completo (resumen detallado)
             estado["resumen"] = ResponseFormatter.format_completo(hallazgos)
         else:
-            # Usar formato especifico por agente
+            # En modo pregunta, usar formato especifico por agente
             if agente == "fechas":
                 estado["resumen"] = ResponseFormatter.format_fechas(hallazgos)
             elif agente == "riesgo":
