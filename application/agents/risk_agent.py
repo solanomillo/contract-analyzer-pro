@@ -15,31 +15,44 @@ class RiskDetectionAgent(BaseAgent):
     def analizar(self, texto: str, contexto: Optional[str] = None) -> List[Hallazgo]:
         logger.info("Analizando riesgos en el contrato...")
         
+        pregunta = contexto if contexto else "detecta todas las clausulas de riesgo"
+        
         prompt = f"""
         Actua como un abogado experto en derecho contractual.
         
-        Analiza el siguiente texto y detecta clausulas que representen riesgos legales:
-        1. Penalizaciones economicas
-        2. Rescision unilateral
-        3. Renovacion automatica
-        4. Exclusividad
-        5. Limitacion de responsabilidad
+        El usuario hizo la siguiente pregunta: "{pregunta}"
         
-        Texto:
+        Analiza el contrato y responde SOLO lo que se pregunta.
+        
+        Texto del contrato:
         ---
         {texto[:3000]}
         ---
         
+        IMPORTANTE:
+        - Si pregunta por PENALIZACIONES, responde SOLO el porcentaje o monto.
+        - Si pregunta por RESCISION, responde SOLO los dias de aviso.
+        - NO devuelvas riesgos que no sean relevantes a la pregunta.
+        
         Responde SOLO con un array JSON. Cada elemento debe tener:
-        - tipo: string ("penalizacion", "rescision", "renovacion_automatica", "exclusividad", "limitacion_responsabilidad")
-        - descripcion: string (explicacion clara)
+        - tipo: string ("penalizacion", "rescision")
+        - descripcion: string (respuesta CONCISA)
         - riesgo: string ("ALTO", "MEDIO", "BAJO")
         - texto_relevante: string (la frase exacta)
-        - recomendacion: string (que deberia hacer la parte)
+        - recomendacion: string (opcional)
         
-        IMPORTANTE: Para preguntas sobre penalizaciones, enfocate en el porcentaje o monto exacto.
+        Ejemplo para "cual es la penalizacion?":
+        [
+            {{
+                "tipo": "penalizacion",
+                "descripcion": "30% del valor total del contrato",
+                "riesgo": "ALTO",
+                "texto_relevante": "multa del 30% del valor total",
+                "recomendacion": ""
+            }}
+        ]
         
-        Si no encuentras nada, devuelve: []
+        Devuelve SOLO 1 elemento si la pregunta es especifica.
         """
         
         respuesta = self._call_llm(prompt)
@@ -49,6 +62,10 @@ class RiskDetectionAgent(BaseAgent):
             return []
         
         datos = self._parsear_respuesta_json(respuesta)
+        
+        if contexto and len(datos) > 2:
+            datos = datos[:2]
+        
         hallazgos = [self._crear_hallazgo(d) for d in datos]
         
         logger.info(f"Riesgos detectados: {len(hallazgos)}")

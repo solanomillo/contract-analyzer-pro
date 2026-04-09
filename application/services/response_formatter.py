@@ -3,6 +3,7 @@ Servicio centralizado para formatear respuestas de los agentes.
 Elimina duplicacion de codigo en el formateo de hallazgos.
 """
 
+import re
 from typing import List, Dict, Any
 
 
@@ -14,62 +15,94 @@ class ResponseFormatter:
     
     @staticmethod
     def format_fechas(hallazgos: List[Dict[str, Any]]) -> str:
-        """Formatea respuestas del agente de fechas - SOLO TEXTO CONCRETO."""
+        """Formatea respuestas del agente de fechas."""
         if not hallazgos:
             return "No se encontraron fechas importantes en el contrato."
         
-        # Buscar la fecha mas relevante segun la pregunta implicita
+        respuestas = []
         for h in hallazgos:
             tipo = h.get("tipo", "")
             descripcion = h.get("descripcion", "")
             
             if tipo == "inicio":
-                return f"{descripcion}"
+                respuestas.append(f"El contrato comienza el {descripcion}")
             elif tipo == "termino":
-                return f"{descripcion}"
+                respuestas.append(f"El contrato termina el {descripcion}")
             elif tipo == "plazo_pago":
-                return f"{descripcion}"
+                respuestas.append(f"Plazo de pago: {descripcion}")
+            elif tipo == "preaviso":
+                respuestas.append(f"Preaviso requerido: {descripcion}")
+            else:
+                respuestas.append(descripcion)
         
-        # Si no encuentra tipo especifico, devolver el primero
-        return f"{hallazgos[0].get('descripcion', '')}"
+        if len(respuestas) == 1:
+            return respuestas[0]
+        return "\n".join(respuestas)
     
     @staticmethod
     def format_riesgos(hallazgos: List[Dict[str, Any]]) -> str:
-        """Formatea respuestas del agente de riesgos - SOLO TEXTO CONCRETO."""
+        """Formatea respuestas del agente de riesgos."""
         if not hallazgos:
             return "No se encontraron clausulas de riesgo en el contrato."
         
-        # Buscar riesgo ALTO primero
+        # Primero buscar penalizaciones
         for h in hallazgos:
-            if h.get("riesgo") == "ALTO":
-                return f"{h.get('descripcion', '')}"
+            if "penalizacion" in h.get("tipo", "").lower():
+                desc = h.get('descripcion', '')
+                # Extraer el porcentaje si existe
+                porcentaje = re.search(r'(\d+)%', desc)
+                if porcentaje:
+                    return f"{porcentaje.group()} del valor total del contrato"
+                return desc
         
-        # Si no hay riesgo ALTO, devolver el primero
-        return f"{hallazgos[0].get('descripcion', '')}"
+        # Buscar rescision
+        for h in hallazgos:
+            if "rescision" in h.get("tipo", "").lower():
+                desc = h.get('descripcion', '')
+                # Extraer los dias
+                dias = re.search(r'(\d+)\s*dias', desc.lower())
+                if dias:
+                    return f"{dias.group()}"
+                return desc
+        
+        # Si no, devolver el primer riesgo
+        return hallazgos[0].get('descripcion', '')
     
     @staticmethod
     def format_obligaciones(hallazgos: List[Dict[str, Any]]) -> str:
-        """Formatea respuestas del agente de obligaciones - SOLO TEXTO CONCRETO."""
+        """Formatea respuestas del agente de obligaciones."""
         if not hallazgos:
             return "No se encontraron obligaciones en el contrato."
         
-        # Buscar informacion de pago (monto)
+        respuestas = []
+        
         for h in hallazgos:
             tipo = h.get("tipo", "")
             descripcion = h.get("descripcion", "")
             
-            # Buscar el monto exacto
-            if "$" in descripcion or "pesos" in descripcion.lower():
-                # Extraer solo el monto
-                if "$" in descripcion:
-                    import re
-                    monto_match = re.search(r'\$\s*[\d,]+\.?\d*', descripcion)
-                    if monto_match:
-                        return f"{monto_match.group()}"
-                return f"{descripcion}"
+            # Buscar informacion de pago (monto)
+            if "pago" in tipo.lower() or "$" in descripcion:
+                monto = re.search(r'\$\s*[\d,]+\.?\d*', descripcion)
+                if monto:
+                    respuestas.append(f"{monto.group()} mensuales")
+                else:
+                    respuestas.append(descripcion)
+            
+            # Buscar obligaciones de servicios
+            elif "servicio" in descripcion.lower() or "luz" in descripcion.lower():
+                respuestas.append(f"Servicios a cargo: {descripcion}")
+            
+            # Buscar obligaciones de mantenimiento
+            elif "mantener" in descripcion.lower():
+                respuestas.append(f"Obligacion: {descripcion}")
+            
+            # Otras obligaciones
+            else:
+                respuestas.append(descripcion)
         
-        # Si no encuentra monto, devolver la primera obligacion
-        return f"{hallazgos[0].get('descripcion', '')}"
+        if len(respuestas) == 1:
+            return respuestas[0]
+        return "\n".join(respuestas)
     
     @staticmethod
     def format_completo(hallazgos: List[Dict[str, Any]]) -> str:
