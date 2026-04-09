@@ -1,6 +1,6 @@
 """
 Ventana principal de la aplicacion.
-Maneja la carga de PDF, RAG, agentes y analisis de riesgos.
+Version simplificada: solo preguntas y analisis completo.
 """
 
 import logging
@@ -103,26 +103,26 @@ class MainWindow:
         # Header
         self._build_header(main_frame)
         
-        # Contenido principal
+        # Contenido principal (2 columnas)
         content_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         content_frame.grid(row=1, column=0, sticky="nsew", pady=20)
         content_frame.grid_columnconfigure(0, weight=1)
         content_frame.grid_columnconfigure(1, weight=1)
         content_frame.grid_rowconfigure(0, weight=1)
         
-        # Columna izquierda
+        # Columna izquierda - Carga de PDF
         left_column = ctk.CTkFrame(content_frame, fg_color="transparent")
         left_column.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         left_column.grid_rowconfigure(1, weight=1)
         left_column.grid_columnconfigure(0, weight=1)
         self._build_upload_area(left_column)
         
-        # Columna derecha
+        # Columna derecha - Preguntas y Analisis
         right_column = ctk.CTkFrame(content_frame, fg_color="transparent")
         right_column.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         right_column.grid_rowconfigure(0, weight=1)
         right_column.grid_columnconfigure(0, weight=1)
-        self._build_preview_area(right_column)
+        self._build_right_area(right_column)
         
         # Footer
         self._build_footer(main_frame)
@@ -193,51 +193,25 @@ class MainWindow:
         self.info_text.insert("1.0", "Esperando carga de documento...")
         self.info_text.configure(state="disabled")
     
-    def _build_preview_area(self, parent):
-        """Construye el area de preview con pestañas."""
-        preview_card = crear_card(parent)
-        preview_card.pack(fill="both", expand=True)
+    def _build_right_area(self, parent):
+        """Construye el area derecha (preguntas + analisis)."""
         
-        tabview = ctk.CTkTabview(preview_card)
-        tabview.pack(fill="both", expand=True, padx=20, pady=20)
+        # Pestañas
+        tabview = ctk.CTkTabview(parent)
+        tabview.pack(fill="both", expand=True)
         
-        tab_texto = tabview.add("Texto del Contrato")
-        self._build_text_tab(tab_texto)
-        
+        # Pestaña de preguntas
         tab_preguntas = tabview.add("Preguntar al Contrato")
         self._build_qa_tab(tab_preguntas)
         
+        # Pestaña de analisis
         tab_analisis = tabview.add("Analisis Legal")
         self._build_analysis_tab(tab_analisis)
-        
-        tab_resultados = tabview.add("Resultados")
-        self._build_results_tab(tab_resultados)
-    
-    def _build_text_tab(self, parent):
-        """Construye la pestaña de texto."""
-        self.progress_card = ProgressCard(parent)
-        self.progress_card.hide()
-        
-        self.preview_text = ctk.CTkTextbox(parent, wrap="word")
-        self.preview_text.pack(fill="both", expand=True)
-        self.preview_text.insert("1.0", "El texto del contrato aparecera aqui...")
-        self.preview_text.configure(state="disabled")
-        
-        stats_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        stats_frame.pack(fill="x", pady=(10, 0))
-        
-        self.stats_label = ctk.CTkLabel(
-            stats_frame,
-            text="",
-            font=ctk.CTkFont(size=11),
-            text_color="#888888"
-        )
-        self.stats_label.pack()
     
     def _build_qa_tab(self, parent):
         """Construye la pestaña de preguntas y respuestas."""
         qa_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        qa_frame.pack(fill="both", expand=True)
+        qa_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         ctk.CTkLabel(
             qa_frame,
@@ -247,7 +221,7 @@ class MainWindow:
         
         self.question_entry = ctk.CTkTextbox(qa_frame, height=80, wrap="word")
         self.question_entry.pack(fill="x", pady=(0, 10))
-        self.question_entry.insert("1.0", "Ejemplo: Cuales son las penalizaciones por incumplimiento?")
+        self.question_entry.insert("1.0", "Ejemplo: Cuanto es el pago mensual?")
         
         btn_frame = ctk.CTkFrame(qa_frame, fg_color="transparent")
         btn_frame.pack(fill="x", pady=(0, 15))
@@ -291,7 +265,7 @@ class MainWindow:
     def _build_analysis_tab(self, parent):
         """Construye la pestaña de analisis legal."""
         analysis_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        analysis_frame.pack(fill="both", expand=True)
+        analysis_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         ctk.CTkLabel(
             analysis_frame,
@@ -301,57 +275,23 @@ class MainWindow:
         
         ctk.CTkLabel(
             analysis_frame,
-            text="Selecciona el tipo de analisis:",
-            font=ctk.CTkFont(size=12)
-        ).pack(anchor="w", pady=(5, 5))
-        
-        options_frame = ctk.CTkFrame(analysis_frame, fg_color="transparent")
-        options_frame.pack(fill="x", pady=(0, 10))
-        
-        self.analysis_type_var = ctk.StringVar(value="completo")
-        
-        self.radio_completo = ctk.CTkRadioButton(
-            options_frame,
-            text="Analisis Completo (todos los aspectos)",
-            variable=self.analysis_type_var,
-            value="completo"
-        )
-        self.radio_completo.pack(anchor="w", pady=2)
-        
-        self.radio_riesgo = ctk.CTkRadioButton(
-            options_frame,
-            text="Solo Riesgos (clausulas peligrosas)",
-            variable=self.analysis_type_var,
-            value="riesgo"
-        )
-        self.radio_riesgo.pack(anchor="w", pady=2)
-        
-        self.radio_fechas = ctk.CTkRadioButton(
-            options_frame,
-            text="Solo Fechas (vencimientos, plazos)",
-            variable=self.analysis_type_var,
-            value="fechas"
-        )
-        self.radio_fechas.pack(anchor="w", pady=2)
-        
-        self.radio_obligaciones = ctk.CTkRadioButton(
-            options_frame,
-            text="Solo Obligaciones (pagos, condiciones)",
-            variable=self.analysis_type_var,
-            value="obligaciones"
-        )
-        self.radio_obligaciones.pack(anchor="w", pady=2)
+            text="Genera un analisis completo del contrato, incluyendo riesgos, fechas y obligaciones.",
+            font=ctk.CTkFont(size=12),
+            text_color="#888888"
+        ).pack(anchor="w", pady=(0, 15))
         
         btn_analysis_frame = ctk.CTkFrame(analysis_frame, fg_color="transparent")
         btn_analysis_frame.pack(fill="x", pady=(10, 5))
         
         self.btn_analyze = ctk.CTkButton(
             btn_analysis_frame,
-            text="Iniciar Analisis",
+            text="Generar Analisis Completo",
             command=self._start_analysis,
-            width=200,
-            height=40,
-            fg_color="#3498db",
+            width=220,
+            height=45,
+            fg_color="#2ecc71",
+            hover_color="#27ae60",
+            font=ctk.CTkFont(size=13, weight="bold"),
             state="disabled"
         )
         self.btn_analyze.pack(side="left")
@@ -360,25 +300,18 @@ class MainWindow:
         self.analysis_progress.pack(side="left", padx=(10, 0))
         self.analysis_progress.set(0)
         self.analysis_progress.pack_forget()
-    
-    def _build_results_tab(self, parent):
-        """Construye la pestaña de resultados."""
-        results_frame = ctk.CTkScrollableFrame(parent)
-        results_frame.pack(fill="both", expand=True)
         
-        main_card = crear_card(results_frame)
-        main_card.pack(fill="x", pady=(0, 15))
-        
+        # Resultados del analisis
         ctk.CTkLabel(
-            main_card,
-            text="RESULTADOS DEL ANALISIS",
-            font=ctk.CTkFont(size=16, weight="bold")
-        ).pack(anchor="w", padx=15, pady=(15, 10))
+            analysis_frame,
+            text="Resultados:",
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(anchor="w", pady=(20, 5))
         
-        self.summary_text = ctk.CTkTextbox(main_card, wrap="word", height=500)
-        self.summary_text.pack(fill="both", expand=True, padx=15, pady=(0, 15))
-        self.summary_text.insert("1.0", "Los resultados completos del analisis apareceran aqui...")
-        self.summary_text.configure(state="disabled")
+        self.analysis_text = ctk.CTkTextbox(analysis_frame, wrap="word", height=400)
+        self.analysis_text.pack(fill="both", expand=True, pady=(0, 10))
+        self.analysis_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
+        self.analysis_text.configure(state="disabled")
     
     def _build_footer(self, parent):
         """Construye el footer."""
@@ -419,12 +352,11 @@ class MainWindow:
         from interface.tkinter.config_window import ConfigWindow
         
         def on_config_saved():
-            """Callback cuando se guarda la configuracion."""
             from application.graph.workflow import AnalisisWorkflow
             api_key = self.config_service.get_api_key()
             self.workflow = AnalisisWorkflow(api_key=api_key)
             self.status_label.configure(text="Configuracion actualizada")
-            messagebox.showinfo("Exito", "Configuracion actualizada. Los nuevos analisis usaran los modelos seleccionados.")
+            messagebox.showinfo("Exito", "Configuracion actualizada.")
         
         config = ConfigWindow(parent=self.root, on_config_saved=on_config_saved)
         config.run()
@@ -450,8 +382,15 @@ class MainWindow:
         """Procesa el PDF."""
         self.is_processing = True
         self.file_upload.set_loading(True)
-        self.progress_card.show()
-        self.progress_card.update_progress(0.1, "Iniciando procesamiento...", "")
+        
+        # Crear barra de progreso temporal
+        self.progress_frame = ctk.CTkFrame(self.root)
+        self.progress_frame.pack(side="bottom", fill="x", padx=20, pady=10)
+        self.progress_bar = ctk.CTkProgressBar(self.progress_frame, width=400)
+        self.progress_bar.pack(pady=5)
+        self.progress_bar.set(0.1)
+        self.progress_label = ctk.CTkLabel(self.progress_frame, text="Iniciando procesamiento...")
+        self.progress_label.pack()
         
         def on_progress(mensaje: str):
             self.root.after(0, lambda: self._update_progress(mensaje))
@@ -470,7 +409,8 @@ class MainWindow:
         )
     
     def _update_progress(self, mensaje: str):
-        self.progress_card.update_progress(0.5, mensaje, "")
+        self.progress_bar.set(0.5)
+        self.progress_label.configure(text=mensaje)
         self.status_label.configure(text=f"Procesando: {mensaje}")
     
     def _on_process_complete(self, resultado: dict):
@@ -478,15 +418,15 @@ class MainWindow:
         self.is_processing = False
         
         self.file_upload.set_success(resultado["nombre_archivo"])
-        self.progress_card.update_progress(1.0, "Indexando...", "")
+        self.progress_bar.set(1.0)
+        self.progress_label.configure(text="Indexando...")
         
         try:
             self.status_label.configure(text="Indexando...")
             index_result = self.rag_service.index_contract(resultado)
             
             if index_result.get("estado") == "exito":
-                self.progress_card.update_progress(1.0, "Completado!", 
-                                                   f"Indexados {index_result['chunks_indexados']} chunks")
+                self.progress_label.configure(text="Procesamiento completado!")
                 self.status_label.configure(text="Documento procesado")
                 
                 self.btn_ask.configure(state="normal")
@@ -500,21 +440,20 @@ class MainWindow:
         
         self._update_contract_info(resultado)
         self._update_preview(resultado)
-        self.root.after(2000, self.progress_card.hide)
+        
+        # Ocultar progreso
+        self.root.after(2000, lambda: self.progress_frame.pack_forget())
     
     def _on_process_error(self, error: str):
         self.is_processing = False
         self.file_upload.set_loading(False)
-        self.progress_card.hide()
+        self.progress_frame.pack_forget()
         self.status_label.configure(text="Error")
         
-        if "503" in error or "UNAVAILABLE" in error or "high demand" in error.lower():
+        if "503" in error or "UNAVAILABLE" in error:
             messagebox.showerror(
                 "Servicio No Disponible",
-                "El servicio de Gemini esta con alta demanda.\n\n"
-                "Sugerencias:\n"
-                "1. Espera unos minutos\n"
-                "2. Cambia el modelo en .env a: GEMINI_MODEL=gemini-2.0-flash"
+                "El servicio de Gemini esta con alta demanda.\n\nEspera unos minutos o cambia el modelo."
             )
         else:
             messagebox.showerror("Error", f"No se pudo procesar:\n{error}")
@@ -530,31 +469,7 @@ Chunks: {resultado['total_chunks']}"""
         self.info_text.configure(state="disabled")
     
     def _update_preview(self, resultado: dict):
-        self.preview_text.configure(state="normal")
-        self.preview_text.delete("1.0", "end")
-        texto = resultado['texto_completo'][:3000]
-        if len(resultado['texto_completo']) > 3000:
-            texto += "\n\n... [texto truncado]"
-        self.preview_text.insert("1.0", texto)
-        self.preview_text.configure(state="disabled")
-        self.stats_label.configure(text=f"Total: {resultado['total_caracteres']} caracteres | {resultado['total_chunks']} chunks")
-    
-    def _extraer_contexto_resumido(self, resultado: dict) -> str:
-        """Extrae un contexto resumido para mostrar."""
-        hallazgos = resultado.get("hallazgos", [])
-        if not hallazgos:
-            return ""
-        
-        if hallazgos[0].get("tipo") == "error":
-            return ""
-        
-        contexto = "Contexto utilizado:\n\n"
-        for i, h in enumerate(hallazgos[:2], 1):
-            texto = h.get('texto_relevante', '')[:200]
-            if texto:
-                contexto += f"{i}. {texto}...\n\n"
-        
-        return contexto
+        pass  # No necesitamos preview de texto
     
     def _ask_question(self):
         """Realiza una pregunta sobre el contrato."""
@@ -578,193 +493,129 @@ Chunks: {resultado['total_chunks']}"""
         
         self.qa_progress.pack(side="left", padx=(10, 0))
         self.qa_progress.set(0.2)
-        
-        logger.info(f"Pregunta: '{pregunta}'")
 
         def task():
-            for intento in range(3):
-                try:
-                    if self.workflow is None:
-                        raise Exception("Sistema no disponible")
+            try:
+                if self.workflow is None:
+                    raise Exception("Sistema no disponible")
 
-                    self.root.after(0, lambda: self.qa_progress.set(0.5))
-                    self.root.after(0, lambda: self.status_label.configure(
-                        text=f"Procesando (intento {intento+1}/3)..."
-                    ))
+                self.root.after(0, lambda: self.qa_progress.set(0.5))
 
-                    resultado = self.workflow.ejecutar_sync(
-                        self.current_contract_data['texto_completo'],
-                        consulta=pregunta,
-                        modo="pregunta"  # <--- NUEVO: modo pregunta
-                    )
+                resultado = self.workflow.ejecutar_sync(
+                    self.current_contract_data['texto_completo'],
+                    consulta=pregunta,
+                    tipo="pregunta"
+                )
 
-                    if resultado.get("exito"):
-                        respuesta = resultado.get("resumen", "No se obtuvo respuesta")
-                        contexto = self._extraer_contexto_resumido(resultado)
-                        self.root.after(0, lambda: self._show_answer(respuesta, contexto))
-                        return
-                    else:
-                        raise Exception(resultado.get("error", "Error desconocido"))
-
-                except Exception as e:
-                    error = str(e)
-                    logger.error(f"Error: {error}")
-
-                    if "503" in error or "UNAVAILABLE" in error or "high demand" in error.lower():
-                        if intento < 2:
-                            time.sleep(2 * (intento + 1))
-                            continue
-                        respuesta = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
-                    elif "quota" in error.lower() or "exceeded" in error.lower():
-                        respuesta = "Cuota de API agotada. Cambia tu API key."
-                    else:
-                        respuesta = f"Error: {error[:200]}"
-
-                    self.root.after(0, lambda: self._show_answer(respuesta, ""))
+                if resultado.get("exito"):
+                    respuesta = resultado.get("resumen", "No se obtuvo respuesta")
+                    self.root.after(0, lambda: self._show_answer(respuesta))
                     return
-                finally:
-                    self.root.after(0, lambda: self.qa_progress.set(1.0))
-                    self.root.after(0, lambda: self.qa_progress.pack_forget())
+                else:
+                    raise Exception(resultado.get("error", "Error desconocido"))
 
-            self.root.after(0, self._reset_ask_button)
+            except Exception as e:
+                error = str(e)
+                logger.error(f"Error: {error}")
+
+                if "503" in error or "UNAVAILABLE" in error:
+                    respuesta = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
+                else:
+                    respuesta = f"Error: {error[:200]}"
+
+                self.root.after(0, lambda: self._show_answer(respuesta))
+            finally:
+                self.root.after(0, lambda: self.qa_progress.set(1.0))
+                self.root.after(0, lambda: self.qa_progress.pack_forget())
+                self.root.after(0, self._reset_ask_button)
 
         threading.Thread(target=task, daemon=True).start()
     
     def _reset_ask_button(self):
-        """Resetea el boton de preguntar."""
         self.btn_ask.configure(state="normal", text="Preguntar")
         self.status_label.configure(text="Listo")
         self.is_answering = False
     
-    def _show_answer(self, respuesta: str, contexto: str):
-        """Muestra la respuesta en la UI - sin prefijos adicionales."""
+    def _show_answer(self, respuesta: str):
         self.answer_text.configure(state="normal")
         self.answer_text.delete("1.0", "end")
-        
-        # Limpiar cualquier "Respuesta:" que pueda venir del formateador
-        texto_limpio = respuesta.replace("Respuesta:", "").replace("Respuesta:\n\n", "").strip()
-        
-        self.answer_text.insert("1.0", texto_limpio)
+        self.answer_text.insert("1.0", respuesta)
         self.answer_text.configure(state="disabled")
-        
-        if contexto:
-            self.context_text.configure(state="normal")
-            self.context_text.delete("1.0", "end")
-            self.context_text.insert("1.0", contexto)
-            self.context_text.configure(state="disabled")
-
-        self.btn_ask.configure(state="normal", text="Preguntar")
-        self.status_label.configure(text="Listo")
-        self.is_answering = False
-        self.qa_progress.pack_forget()
     
     def _start_analysis(self):
-        """Inicia el analisis legal."""
+        """Inicia el analisis legal completo."""
         if not self.current_contract_data:
             messagebox.showwarning("Advertencia", "Carga un contrato primero")
             return
 
         self.is_analyzing = True
-        self.btn_analyze.configure(state="disabled", text="Analizando...")
+        self.btn_analyze.configure(state="disabled", text="Generando analisis...")
         self.status_label.configure(text="Analizando contrato...")
         
         self.analysis_progress.pack(side="left", padx=(10, 0))
         self.analysis_progress.set(0.2)
         
-        analysis_type = self.analysis_type_var.get()
-        
-        # Para analisis legal, siempre usamos el modo "analisis"
-        consulta_map = {
-            "completo": "analizar contrato completo",
-            "riesgo": "analizar solo riesgos y clausulas peligrosas",
-            "fechas": "analizar solo fechas importantes y plazos",
-            "obligaciones": "analizar solo obligaciones de pago y condiciones"
-        }
-        
-        consulta = consulta_map.get(analysis_type, "analizar contrato completo")
-        
-        logger.info(f"Analisis tipo: {analysis_type} -> Consulta: {consulta}")
+        self.analysis_text.configure(state="normal")
+        self.analysis_text.delete("1.0", "end")
+        self.analysis_text.insert("1.0", "Generando analisis... Esto puede tomar unos segundos.")
+        self.analysis_text.configure(state="disabled")
 
         def task():
-            for intento in range(3):
-                try:
-                    if self.workflow is None:
-                        raise Exception("Sistema no disponible")
+            try:
+                if self.workflow is None:
+                    raise Exception("Sistema no disponible")
 
-                    self.root.after(0, lambda: self.analysis_progress.set(0.5))
-                    self.root.after(0, lambda: self.status_label.configure(
-                        text=f"Analizando (intento {intento+1}/3)..."
-                    ))
+                self.root.after(0, lambda: self.analysis_progress.set(0.5))
 
-                    resultado = self.workflow.ejecutar_sync(
-                        self.current_contract_data['texto_completo'],
-                        consulta=consulta,
-                        modo="analisis"  # <--- NUEVO: modo analisis
-                    )
+                resultado = self.workflow.ejecutar_sync(
+                    self.current_contract_data['texto_completo'],
+                    consulta="",
+                    tipo="analisis"
+                )
 
-                    if resultado.get("exito"):
-                        respuesta = resultado.get("resumen", "No se obtuvo respuesta")
-                        self.root.after(0, lambda: self._show_analysis_results(respuesta))
-                        return
-                    else:
-                        raise Exception(resultado.get("error", "Error desconocido"))
-
-                except Exception as e:
-                    error = str(e)
-                    logger.error(f"Error en analisis: {error}")
-
-                    if "503" in error or "UNAVAILABLE" in error or "high demand" in error.lower():
-                        if intento < 2:
-                            time.sleep(2 * (intento + 1))
-                            continue
-                        error_msg = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
-                    elif "quota" in error.lower() or "exceeded" in error.lower():
-                        error_msg = "Cuota de API agotada. Cambia tu API key."
-                    else:
-                        error_msg = f"Error: {error[:200]}"
-
-                    self.root.after(0, lambda: self._show_analysis_error(error_msg))
+                if resultado.get("exito"):
+                    analisis = resultado.get("resumen", "No se genero analisis")
+                    self.root.after(0, lambda: self._show_analysis(analisis))
                     return
-                finally:
-                    self.root.after(0, lambda: self.analysis_progress.set(1.0))
-                    self.root.after(0, lambda: self.analysis_progress.pack_forget())
+                else:
+                    raise Exception(resultado.get("error", "Error desconocido"))
 
-            self.root.after(0, self._reset_analyze_button)
+            except Exception as e:
+                error = str(e)
+                logger.error(f"Error en analisis: {error}")
+
+                if "503" in error or "UNAVAILABLE" in error:
+                    error_msg = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
+                else:
+                    error_msg = f"Error: {error[:200]}"
+
+                self.root.after(0, lambda: self._show_analysis_error(error_msg))
+            finally:
+                self.root.after(0, lambda: self.analysis_progress.set(1.0))
+                self.root.after(0, lambda: self.analysis_progress.pack_forget())
+                self.root.after(0, self._reset_analyze_button)
 
         threading.Thread(target=task, daemon=True).start()
     
     def _reset_analyze_button(self):
-        """Resetea el boton de analizar."""
-        self.btn_analyze.configure(state="normal", text="Iniciar Analisis")
+        self.btn_analyze.configure(state="normal", text="Generar Analisis Completo")
         self.status_label.configure(text="Listo")
         self.is_analyzing = False
     
-    def _show_analysis_results(self, resumen: str):
-        """Muestra los resultados del analisis."""
-        self.summary_text.configure(state="normal")
-        self.summary_text.delete("1.0", "end")
-        self.summary_text.insert("1.0", resumen)
-        self.summary_text.configure(state="disabled")
+    def _show_analysis(self, analisis: str):
+        self.analysis_text.configure(state="normal")
+        self.analysis_text.delete("1.0", "end")
+        self.analysis_text.insert("1.0", analisis)
+        self.analysis_text.configure(state="disabled")
         
         self.btn_export.configure(state="normal")
         self.status_label.configure(text="Analisis completado")
-        
-        self.btn_analyze.configure(state="normal", text="Iniciar Analisis")
-        self.is_analyzing = False
-        self.analysis_progress.pack_forget()
-        
-        messagebox.showinfo("Analisis Completado", "El analisis ha finalizado. Los resultados estan en la pestaña Resultados.")
     
     def _show_analysis_error(self, error: str):
-        """Muestra error en el analisis."""
-        self.summary_text.configure(state="normal")
-        self.summary_text.delete("1.0", "end")
-        self.summary_text.insert("1.0", f"Error en el analisis:\n\n{error}")
-        self.summary_text.configure(state="disabled")
-        
-        self.btn_analyze.configure(state="normal", text="Iniciar Analisis")
-        self.is_analyzing = False
-        self.analysis_progress.pack_forget()
+        self.analysis_text.configure(state="normal")
+        self.analysis_text.delete("1.0", "end")
+        self.analysis_text.insert("1.0", f"Error en el analisis:\n\n{error}")
+        self.analysis_text.configure(state="disabled")
         self.status_label.configure(text="Error en analisis")
     
     def _export_analysis(self):
@@ -773,38 +624,30 @@ Chunks: {resultado['total_chunks']}"""
             messagebox.showwarning("Sin documento", "Carga un contrato primero")
             return
         
-        resumen = self.summary_text.get("1.0", "end-1c")
+        analisis = self.analysis_text.get("1.0", "end-1c")
         
-        if not resumen or resumen == "Los resultados del analisis apareceran aqui...":
+        if not analisis or analisis == "Los resultados del analisis apareceran aqui...":
             messagebox.showwarning("Sin analisis", "Primero realiza un analisis del contrato")
             return
         
         archivo = filedialog.asksaveasfilename(
             defaultextension=".pdf",
             title="Guardar Analisis como PDF",
-            filetypes=[
-                ("Documento PDF", "*.pdf"),
-                ("Todos los archivos", "*.*")
-            ]
+            filetypes=[("Documento PDF", "*.pdf"), ("Todos los archivos", "*.*")]
         )
         
         if archivo:
             try:
                 export_service = PDFExportService()
-                
                 pdf_path = export_service.exportar_analisis(
-                    resumen=resumen,
+                    resumen=analisis,
                     contrato_nombre=self.current_contract_data['nombre_archivo'],
                     archivo_salida=Path(archivo)
                 )
-                
-                messagebox.showinfo(
-                    "Exportacion Exitosa", 
-                    f"Analisis exportado a PDF:\n\n{pdf_path}"
-                )
+                messagebox.showinfo("Exito", f"Analisis exportado a:\n{pdf_path}")
             except Exception as e:
                 logger.error(f"Error exportando: {e}")
-                messagebox.showerror("Error", f"No se pudo exportar:\n\n{e}")
+                messagebox.showerror("Error", f"No se pudo exportar:\n{e}")
     
     def _on_clear(self):
         """Limpia el contrato actual."""
@@ -823,11 +666,6 @@ Chunks: {resultado['total_chunks']}"""
         self.info_text.insert("1.0", "Esperando carga...")
         self.info_text.configure(state="disabled")
         
-        self.preview_text.configure(state="normal")
-        self.preview_text.delete("1.0", "end")
-        self.preview_text.insert("1.0", "El texto aparecera aqui...")
-        self.preview_text.configure(state="disabled")
-        
         self.answer_text.configure(state="normal")
         self.answer_text.delete("1.0", "end")
         self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
@@ -838,15 +676,14 @@ Chunks: {resultado['total_chunks']}"""
         self.context_text.insert("1.0", "El contexto aparecera aqui...")
         self.context_text.configure(state="disabled")
         
-        self.summary_text.configure(state="normal")
-        self.summary_text.delete("1.0", "end")
-        self.summary_text.insert("1.0", "Los resultados apareceran aqui...")
-        self.summary_text.configure(state="disabled")
+        self.analysis_text.configure(state="normal")
+        self.analysis_text.delete("1.0", "end")
+        self.analysis_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
+        self.analysis_text.configure(state="disabled")
         
         self.question_entry.delete("1.0", "end")
-        self.question_entry.insert("1.0", "Ejemplo: Cuales son las penalizaciones?")
+        self.question_entry.insert("1.0", "Ejemplo: Cuanto es el pago mensual?")
         
-        self.stats_label.configure(text="")
         self.status_label.configure(text="Sistema listo")
         
         self.btn_ask.configure(state="disabled")
@@ -855,13 +692,10 @@ Chunks: {resultado['total_chunks']}"""
         
         self.file_upload.reset_state()
         self.file_upload.set_loading(False)
-        self.progress_card.hide()
-        self.progress_card.reset()
         
         messagebox.showinfo("Limpieza", "Contrato eliminado. Puedes cargar otro.")
     
     def _on_closing(self):
-        """Maneja el cierre."""
         if self.is_processing or self.is_analyzing or self.is_answering:
             if messagebox.askyesno("Salir", "Hay procesos en curso. ¿Salir?"):
                 self.root.destroy()
@@ -869,5 +703,4 @@ Chunks: {resultado['total_chunks']}"""
             self.root.destroy()
     
     def run(self):
-        """Ejecuta la ventana."""
         self.root.mainloop()
