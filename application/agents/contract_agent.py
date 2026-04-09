@@ -4,6 +4,7 @@ Maneja tanto preguntas específicas como análisis completos.
 """
 
 import logging
+import re
 from typing import List, Optional
 from application.agents.base_agent import BaseAgent, Hallazgo
 
@@ -91,31 +92,65 @@ class ContractAgent(BaseAgent):
         {texto[:5000]}
         ---
         
-        Extrae y clasifica:
+        Extrae y organiza la información en las siguientes categorías:
         
         1. RIESGOS Y CLAUSULAS PELIGROSAS:
-           - Penalizaciones económicas (porcentajes, montos)
-           - Rescisión unilateral (condiciones, plazos)
+           - Penalizaciones económicas (porcentajes, montos exactos)
+           - Rescisión unilateral (condiciones, plazos exactos en días)
            - Renovación automática
            - Limitación de responsabilidad
+           - Cláusulas abusivas
         
-        2. FECHAS IMPORTANTES:
-           - Fecha de inicio
-           - Fecha de término
+        2. FECHAS IMPORTANTES (con formato día/mes/año):
+           - Fecha de inicio del contrato
+           - Fecha de término del contrato
+           - Plazos de pago (ej: "del día 1 al día 10 de cada mes")
+           - Plazos de preaviso (ej: "30 días")
+        
+        3. OBLIGACIONES DE LAS PARTES:
+           - Montos de pago (cantidad exacta)
            - Plazos de pago
-           - Plazos de preaviso
+           - Servicios a cargo (luz, agua, gas, etc.)
+           - Obligaciones de mantenimiento
+           - Restricciones de uso
         
-        3. OBLIGACIONES:
-           - Montos de pago
-           - Plazos de pago
-           - Obligaciones de las partes
-        
-        Responde SOLO con un array JSON. Cada hallazgo debe tener:
-        - tipo: string ("penalizacion", "rescision", "fecha", "pago", "obligacion")
-        - descripcion: string (explicación clara)
+        Para CADA hallazgo, incluye:
+        - tipo: string ("penalizacion", "rescision", "fecha_inicio", "fecha_termino", "plazo_pago", "preaviso", "obligacion_pago", "obligacion_servicios", "obligacion_mantenimiento")
+        - descripcion: string (explicación CLARA y CONCISA con datos exactos)
         - riesgo: string ("ALTO", "MEDIO", "BAJO")
-        - texto_relevante: string (la frase exacta)
-        - recomendacion: string (qué hacer)
+        - texto_relevante: string (la frase EXACTA del contrato)
+        - recomendacion: string (qué debe hacer la parte, con acciones concretas)
+        
+        IMPORTANTE:
+        - Para fechas, escribe el día, mes y año completo
+        - Para plazos, escribe el número exacto de días
+        - Para montos, escribe la cantidad exacta con símbolo $
+        - Para servicios, enumera específicamente cuáles (luz, agua, gas, etc.)
+        
+        Responde SOLO con un array JSON. Ejemplo:
+        [
+            {{
+                "tipo": "fecha_inicio",
+                "descripcion": "El contrato comienza el 01 de enero de 2026",
+                "riesgo": "MEDIO",
+                "texto_relevante": "comenzando el 01 de enero de 2026",
+                "recomendacion": "Preparar documentación necesaria para la fecha de inicio"
+            }},
+            {{
+                "tipo": "plazo_pago",
+                "descripcion": "El pago debe realizarse entre el día 1 y el día 10 de cada mes",
+                "riesgo": "ALTO",
+                "texto_relevante": "El pago deberá realizarse del día 1 al día 10 de cada mes",
+                "recomendacion": "Configurar pago automático o recordatorio para no atrasarse"
+            }},
+            {{
+                "tipo": "obligacion_servicios",
+                "descripcion": "Los servicios de luz, agua y gas son a cargo del LOCATARIO",
+                "riesgo": "MEDIO",
+                "texto_relevante": "Los servicios (luz, agua, gas, etc.) estarán a cargo del LOCATARIO",
+                "recomendacion": "Solicitar el cambio de titularidad de los servicios a su nombre"
+            }}
+        ]
         
         Devuelve tantos elementos como hallazgos encuentres.
         Si no encuentras algo, no lo incluyas.

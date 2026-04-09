@@ -20,38 +20,94 @@ class ResponseFormatter:
     
     @staticmethod
     def format_completo(hallazgos: List[Dict[str, Any]]) -> str:
-        """Formatea análisis completo."""
+        """Formatea análisis completo con estructura clara."""
         if not hallazgos:
             return "No se encontró información relevante en el contrato."
         
-        altos = [h for h in hallazgos if h.get("riesgo") == "ALTO"]
-        medios = [h for h in hallazgos if h.get("riesgo") == "MEDIO"]
-        bajos = [h for h in hallazgos if h.get("riesgo") == "BAJO"]
+        # Clasificar hallazgos por tipo
+        fechas = []
+        riesgos_altos = []
+        riesgos_medios = []
+        obligaciones = []
+        otros = []
+        
+        for h in hallazgos:
+            tipo = h.get("tipo", "")
+            riesgo = h.get("riesgo", "MEDIO")
+            
+            if "fecha" in tipo:
+                fechas.append(h)
+            elif riesgo == "ALTO":
+                riesgos_altos.append(h)
+            elif riesgo == "MEDIO":
+                riesgos_medios.append(h)
+            elif "obligacion" in tipo or "pago" in tipo or "servicios" in tipo:
+                obligaciones.append(h)
+            else:
+                otros.append(h)
         
         lineas = []
         lineas.append("=" * 60)
         lineas.append("ANALISIS LEGAL DEL CONTRATO")
         lineas.append("=" * 60)
         
-        lineas.append(f"\nRIESGOS ALTOS ({len(altos)})")
-        lineas.append("-" * 40)
-        for h in altos[:5]:
-            lineas.append(f"* {h.get('descripcion', '')}")
-            if h.get('texto_relevante'):
-                lineas.append(f"  Texto: \"{h.get('texto_relevante', '')[:150]}...\"")
-            if h.get('recomendacion'):
-                lineas.append(f"  Recomendacion: {h.get('recomendacion')}")
+        # Sección 1: Fechas Importantes
+        if fechas:
+            lineas.append("\n1. FECHAS IMPORTANTES")
+            lineas.append("-" * 40)
+            for h in fechas:
+                desc = h.get('descripcion', '')
+                texto = h.get('texto_relevante', '')
+                lineas.append(f"• {desc}")
+                if texto:
+                    lineas.append(f"  Texto: \"{texto[:100]}...\"")
             lineas.append("")
         
-        lineas.append(f"\nRIESGOS MEDIOS ({len(medios)})")
-        lineas.append("-" * 40)
-        for h in medios[:5]:
-            lineas.append(f"* {h.get('descripcion', '')}")
+        # Sección 2: Riesgos Altos
+        if riesgos_altos:
+            lineas.append("2. RIESGOS ALTOS (Requieren atención inmediata)")
+            lineas.append("-" * 40)
+            for h in riesgos_altos:
+                desc = h.get('descripcion', '')
+                texto = h.get('texto_relevante', '')
+                rec = h.get('recomendacion', '')
+                lineas.append(f"• {desc}")
+                if texto:
+                    lineas.append(f"  Texto: \"{texto[:150]}...\"")
+                if rec:
+                    lineas.append(f"  Recomendacion: {rec}")
             lineas.append("")
         
-        lineas.append(f"\nRIESGOS BAJOS ({len(bajos)})")
-        lineas.append("-" * 40)
-        for h in bajos[:3]:
-            lineas.append(f"* {h.get('descripcion', '')}")
+        # Sección 3: Riesgos Medios
+        if riesgos_medios:
+            lineas.append("3. RIESGOS MEDIOS (Requieren atención)")
+            lineas.append("-" * 40)
+            for h in riesgos_medios:
+                desc = h.get('descripcion', '')
+                texto = h.get('texto_relevante', '')
+                lineas.append(f"• {desc}")
+                if texto:
+                    lineas.append(f"  Texto: \"{texto[:150]}...\"")
+            lineas.append("")
+        
+        # Sección 4: Obligaciones de las Partes
+        if obligaciones:
+            lineas.append("4. OBLIGACIONES DE LAS PARTES")
+            lineas.append("-" * 40)
+            for h in obligaciones:
+                desc = h.get('descripcion', '')
+                rec = h.get('recomendacion', '')
+                lineas.append(f"• {desc}")
+                if rec:
+                    lineas.append(f"  Recomendacion: {rec}")
+            lineas.append("")
+        
+        # Sección 5: Otros hallazgos
+        if otros:
+            lineas.append("5. INFORMACION ADICIONAL")
+            lineas.append("-" * 40)
+            for h in otros:
+                desc = h.get('descripcion', '')
+                lineas.append(f"• {desc}")
         
         return "\n".join(lineas)
