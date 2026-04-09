@@ -1,24 +1,24 @@
 """
-Servicio para exportar analisis legales a PDF.
+Servicio para exportar analisis legales a PDF con formato estructurado.
 """
 
 import logging
+import re
 from pathlib import Path
 from datetime import datetime
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib import colors
 
 logger = logging.getLogger(__name__)
 
 
 class PDFExportService:
     """
-    Servicio para exportar analisis de contratos a PDF.
+    Servicio para exportar analisis de contratos a PDF con formato profesional.
     """
     
     def __init__(self):
@@ -36,16 +36,31 @@ class PDFExportService:
             fontSize=18,
             alignment=TA_CENTER,
             spaceAfter=20,
+            textColor=colors.HexColor('#2ecc71'),
             fontName='Helvetica-Bold'
         ))
         
-        # Estilo para subtitulos
+        # Estilo para subtitulos de seccion
         styles.add(ParagraphStyle(
-            name='Subtitulo',
+            name='Seccion',
             parent=styles['Heading2'],
             fontSize=14,
             alignment=TA_LEFT,
             spaceAfter=10,
+            spaceBefore=15,
+            textColor=colors.HexColor('#3498db'),
+            fontName='Helvetica-Bold'
+        ))
+        
+        # Estilo para subsecciones
+        styles.add(ParagraphStyle(
+            name='SubSeccion',
+            parent=styles['Heading3'],
+            fontSize=12,
+            alignment=TA_LEFT,
+            spaceAfter=8,
+            spaceBefore=10,
+            textColor=colors.HexColor('#2c3e50'),
             fontName='Helvetica-Bold'
         ))
         
@@ -59,25 +74,50 @@ class PDFExportService:
             fontName='Helvetica'
         ))
         
-        # Estilo para texto de recomendaciones
+        # Estilo para items de lista
         styles.add(ParagraphStyle(
-            name='Recomendacion',
+            name='ListItem',
             parent=styles['Normal'],
             fontSize=10,
-            alignment=TA_JUSTIFY,
-            spaceAfter=6,
+            alignment=TA_LEFT,
+            spaceAfter=4,
             leftIndent=20,
             fontName='Helvetica'
         ))
         
-        # Estilo para secciones
+        # Estilo para texto de recomendacion
         styles.add(ParagraphStyle(
-            name='Seccion',
-            parent=styles['Heading3'],
-            fontSize=12,
+            name='Recomendacion',
+            parent=styles['Normal'],
+            fontSize=9,
+            alignment=TA_JUSTIFY,
+            spaceAfter=6,
+            leftIndent=30,
+            textColor=colors.HexColor('#27ae60'),
+            fontName='Helvetica-Oblique'
+        ))
+        
+        # Estilo para texto citado
+        styles.add(ParagraphStyle(
+            name='TextoCitado',
+            parent=styles['Normal'],
+            fontSize=9,
+            alignment=TA_JUSTIFY,
+            spaceAfter=4,
+            leftIndent=40,
+            textColor=colors.HexColor('#7f8c8d'),
+            fontName='Helvetica-Oblique'
+        ))
+        
+        # Estilo para metadatos
+        styles.add(ParagraphStyle(
+            name='Metadata',
+            parent=styles['Normal'],
+            fontSize=9,
             alignment=TA_LEFT,
-            spaceAfter=8,
-            fontName='Helvetica-Bold'
+            spaceAfter=4,
+            textColor=colors.HexColor('#95a5a6'),
+            fontName='Helvetica'
         ))
         
         return styles
@@ -85,7 +125,7 @@ class PDFExportService:
     def exportar_analisis(self, resumen: str, contrato_nombre: str, 
                           archivo_salida: Path = None) -> Path:
         """
-        Exporta el analisis legal a un archivo PDF.
+        Exporta el analisis legal a un archivo PDF con formato estructurado.
         
         Args:
             resumen: Texto del resumen del analisis
@@ -108,63 +148,28 @@ class PDFExportService:
             rightMargin=72,
             leftMargin=72,
             topMargin=72,
-            bottomMargin=72
+            bottomMargin=72,
+            title=f"Analisis Legal - {contrato_nombre}",
+            author="Contract Analyzer Pro"
         )
         
         # Contenido del PDF
         story = []
         
-        # Titulo
+        # === TITULO ===
         story.append(Paragraph("CONTRACT ANALYZER PRO", self.styles['TituloPrincipal']))
-        story.append(Paragraph("Analisis Legal de Contrato", self.styles['Subtitulo']))
+        story.append(Paragraph("Analisis Legal de Contrato", self.styles['Seccion']))
         story.append(Spacer(1, 0.2 * inch))
         
-        # Informacion del documento
-        story.append(Paragraph(f"Contrato analizado: {contrato_nombre}", self.styles['TextoNormal']))
+        # === METADATOS ===
+        story.append(Paragraph(f"Contrato analizado: {contrato_nombre}", self.styles['Metadata']))
         story.append(Paragraph(f"Fecha de analisis: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", 
-                               self.styles['TextoNormal']))
+                               self.styles['Metadata']))
         story.append(Spacer(1, 0.3 * inch))
         
-        # Procesar el resumen (eliminar emojis y formatear)
-        resumen_limpio = self._limpiar_texto(resumen)
-        
-        # Dividir el resumen en secciones y agregar al PDF
-        lineas = resumen_limpio.split('\n')
-        
-        for linea in lineas:
-            linea = linea.strip()
-            if not linea:
-                story.append(Spacer(1, 0.1 * inch))
-                continue
-            
-            # Detectar secciones por palabras clave
-            if 'RIESGOS ALTOS' in linea.upper():
-                story.append(Paragraph("RIESGOS ALTOS", self.styles['Seccion']))
-            elif 'RIESGOS MEDIOS' in linea.upper():
-                story.append(PageBreak())
-                story.append(Paragraph("RIESGOS MEDIOS", self.styles['Seccion']))
-            elif 'RIESGOS BAJOS' in linea.upper() or 'RIESGOS BAJOS / INFORMATIVOS' in linea.upper():
-                story.append(PageBreak())
-                story.append(Paragraph("RIESGOS BAJOS / INFORMATIVOS", self.styles['Seccion']))
-            elif 'RECOMENDACIONES' in linea.upper():
-                story.append(Spacer(1, 0.2 * inch))
-                story.append(Paragraph("RECOMENDACIONES PRIORITARIAS", self.styles['Seccion']))
-            elif linea.startswith('•') or linea.startswith('-'):
-                # Es un item de lista
-                texto_item = linea[1:].strip()
-                story.append(Paragraph(f"• {texto_item}", self.styles['TextoNormal']))
-            elif linea.startswith('  '):
-                # Es subitem (texto o recomendacion)
-                texto_sub = linea.strip()
-                if 'recomendacion' in texto_sub.lower() or 'recomendación' in texto_sub.lower():
-                    story.append(Paragraph(texto_sub, self.styles['Recomendacion']))
-                else:
-                    story.append(Paragraph(texto_sub, self.styles['TextoNormal']))
-            else:
-                # Texto normal
-                if '=' in linea or '-' * 10 in linea:
-                    continue  # Saltar lineas de separacion
-                story.append(Paragraph(linea, self.styles['TextoNormal']))
+        # === CONTENIDO DEL ANALISIS ===
+        # Procesar el resumen respetando la estructura
+        story = self._procesar_contenido(resumen, story)
         
         # Generar PDF
         doc.build(story)
@@ -172,46 +177,101 @@ class PDFExportService:
         logger.info(f"PDF generado exitosamente: {archivo_salida}")
         return archivo_salida
     
-    def _limpiar_texto(self, texto: str) -> str:
+    def _procesar_contenido(self, resumen: str, story: list) -> list:
         """
-        Elimina emojis, markdown y formateo especial del texto.
+        Procesa el contenido del resumen respetando la estructura (secciones, items, etc.)
+        """
+        lineas = resumen.split('\n')
+        i = 0
+        en_lista = False
         
-        Args:
-            texto: Texto original con posibles emojis y markdown
+        while i < len(lineas):
+            linea = lineas[i].strip()
             
-        Returns:
-            Texto limpio sin emojis ni formateo
+            if not linea:
+                story.append(Spacer(1, 0.1 * inch))
+                i += 1
+                continue
+            
+            # Detectar titulo de seccion (ej: "1. FECHAS IMPORTANTES")
+            if re.match(r'^\d+\.', linea):
+                # Limpiar formato de markdown
+                linea_limpia = self._limpiar_formato(linea)
+                story.append(Paragraph(linea_limpia, self.styles['Seccion']))
+                en_lista = False
+                i += 1
+                continue
+            
+            # Detectar subseccion (ej: "2. RIESGOS ALTOS (Requieren atención inmediata)")
+            if re.match(r'^\d+\.', linea) or ('RIESGOS' in linea.upper() and '---' not in linea):
+                linea_limpia = self._limpiar_formato(linea)
+                story.append(Paragraph(linea_limpia, self.styles['SubSeccion']))
+                en_lista = False
+                i += 1
+                continue
+            
+            # Detectar linea de separacion (---)
+            if '---' in linea or '===' in linea or '---' in linea:
+                i += 1
+                continue
+            
+            # Detectar item de lista (comienza con • o *)
+            if linea.startswith('•') or linea.startswith('*'):
+                # Quitar el bullet point
+                texto_item = linea[1:].strip()
+                texto_limpio = self._limpiar_formato(texto_item)
+                story.append(Paragraph(f"• {texto_limpio}", self.styles['ListItem']))
+                en_lista = True
+                i += 1
+                continue
+            
+            # Detectar texto con "Texto:" (cita)
+            if linea.startswith('Texto:') or 'Texto:' in linea[:10]:
+                texto_cita = linea.replace('Texto:', '').strip()
+                texto_limpio = self._limpiar_formato(texto_cita)
+                # Limitar longitud de citas
+                if len(texto_limpio) > 200:
+                    texto_limpio = texto_limpio[:200] + "..."
+                story.append(Paragraph(f'"{texto_limpio}"', self.styles['TextoCitado']))
+                i += 1
+                continue
+            
+            # Detectar recomendacion
+            if linea.startswith('Recomendacion:') or 'Recomendacion:' in linea[:15]:
+                texto_rec = linea.replace('Recomendacion:', '').strip()
+                texto_limpio = self._limpiar_formato(texto_rec)
+                story.append(Paragraph(f"Recomendacion: {texto_limpio}", self.styles['Recomendacion']))
+                i += 1
+                continue
+            
+            # Texto normal
+            texto_limpio = self._limpiar_formato(linea)
+            if len(texto_limpio) > 80:
+                # Texto largo, puede necesitar salto de pagina
+                story.append(Paragraph(texto_limpio, self.styles['TextoNormal']))
+            elif texto_limpio:
+                story.append(Paragraph(texto_limpio, self.styles['TextoNormal']))
+            
+            i += 1
+        
+        return story
+    
+    def _limpiar_formato(self, texto: str) -> str:
         """
-        # Eliminar emojis (rango Unicode de emojis)
-        import re
-        emoji_pattern = re.compile(
-            "["
-            u"\U0001F600-\U0001F64F"  # emoticons
-            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-            u"\U0001F680-\U0001F6FF"  # transport & map symbols
-            u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
-            u"\U00002702-\U000027B0"
-            u"\U000024C2-\U0001F251"
-            u"\U0001F900-\U0001F9FF"  # supplemental symbols
-            u"\U0001FA70-\U0001FAFF"  # more symbols
-            "]+",
-            flags=re.UNICODE
-        )
-        texto = emoji_pattern.sub('', texto)
+        Limpia el texto de caracteres especiales que reportlab no soporta.
+        """
+        # Reemplazar caracteres especiales
+        texto = texto.replace('•', '-')
+        texto = texto.replace('*', '-')
+        texto = texto.replace('_', '')
+        texto = texto.replace('`', '')
         
-        # Eliminar markdown bold (**texto**)
-        texto = re.sub(r'\*\*(.*?)\*\*', r'\1', texto)
+        # Asegurar que los caracteres sean compatibles con reportlab
+        texto = texto.encode('ascii', 'ignore').decode('ascii')
         
-        # Eliminar markdown italic (*texto*)
-        texto = re.sub(r'\*(.*?)\*', r'\1', texto)
+        # Escapar caracteres especiales de HTML/XML
+        texto = texto.replace('&', '&amp;')
+        texto = texto.replace('<', '&lt;')
+        texto = texto.replace('>', '&gt;')
         
-        # Eliminar otros caracteres especiales comunes
-        texto = texto.replace('```', '').replace('`', '')
-        
-        # Limpiar multiples espacios
-        texto = re.sub(r'\s+', ' ', texto)
-        
-        # Restaurar saltos de linea donde corresponde
-        texto = texto.replace('. ', '.\n')
-        
-        return texto.strip()
+        return texto
