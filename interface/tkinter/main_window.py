@@ -594,7 +594,8 @@ Chunks: {resultado['total_chunks']}"""
 
                     resultado = self.workflow.ejecutar_sync(
                         self.current_contract_data['texto_completo'],
-                        consulta=pregunta
+                        consulta=pregunta,
+                        modo="pregunta"  # <--- NUEVO: modo pregunta
                     )
 
                     if resultado.get("exito"):
@@ -672,6 +673,7 @@ Chunks: {resultado['total_chunks']}"""
         
         analysis_type = self.analysis_type_var.get()
         
+        # Para analisis legal, siempre usamos el modo "analisis"
         consulta_map = {
             "completo": "analizar contrato completo",
             "riesgo": "analizar solo riesgos y clausulas peligrosas",
@@ -696,7 +698,8 @@ Chunks: {resultado['total_chunks']}"""
 
                     resultado = self.workflow.ejecutar_sync(
                         self.current_contract_data['texto_completo'],
-                        consulta=consulta
+                        consulta=consulta,
+                        modo="analisis"  # <--- NUEVO: modo analisis
                     )
 
                     if resultado.get("exito"):

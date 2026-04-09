@@ -1,6 +1,6 @@
 """
 Workflow de agentes usando LangGraph.
-Router decide qué agente usar según la consulta.
+Router decide qué agente usar según la consulta y el modo.
 """
 
 import logging
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 class EstadoAnalisis(TypedDict):
     texto: str
     consulta: Optional[str]
+    modo: str  # "pregunta" o "analisis"
     hallazgos: List[Dict[str, Any]]
     agente_usado: str
     errores: List[str]
@@ -33,9 +34,6 @@ class EstadoAnalisis(TypedDict):
 
 
 class AnalisisWorkflow:
-    """
-    Workflow para analisis de contratos.
-    """
     
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key
@@ -81,7 +79,7 @@ class AnalisisWorkflow:
         return workflow.compile()
     
     def _router_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
-        logger.info(f"Router analizando consulta: {estado.get('consulta', 'ninguna')}")
+        logger.info(f"Router analizando consulta: {estado.get('consulta', 'ninguna')} (modo: {estado.get('modo', 'pregunta')})")
         estado["hallazgos"] = []
         estado["errores"] = []
         estado["agente_usado"] = "router"
@@ -90,30 +88,29 @@ class AnalisisWorkflow:
     
     def _router_decision(self, estado: EstadoAnalisis) -> str:
         consulta = estado.get("consulta", "").lower()
+        modo = estado.get("modo", "pregunta")
         
-        logger.info(f"Router evaluando consulta: '{consulta}'")
+        logger.info(f"Router evaluando: modo={modo}, consulta='{consulta}'")
         
-        # Palabras clave para analisis completo
-        palabras_completo = [
-            "analizar", "completo", "todos", "analisis legal", "que opinas",
-            "resumen", "general", "evalua", "revisa"
-        ]
+        # Si es modo "analisis", siempre usar COMPLETO
+        if modo == "analisis":
+            logger.info("=== ROUTER: Modo analisis, usando agente COMPLETO ===")
+            return "completo"
         
-        # Palabras clave para riesgos
+        # Modo "pregunta": usar router especifico
+        # Palabras clave para cada tipo
         palabras_riesgo = [
             "penalizacion", "multa", "riesgo", "clausula", "rescicion",
             "terminacion", "responsabilidad", "exclusividad", "peligrosa",
             "incumplimiento", "sancion", "penalización"
         ]
         
-        # Palabras clave para fechas
         palabras_fechas = [
             "fecha", "vencimiento", "plazo", "renovacion", "dias",
             "meses", "anios", "termina", "inicia", "vigencia", "duracion",
             "comienza", "finaliza", "cuando"
         ]
         
-        # Palabras clave para obligaciones
         palabras_obligaciones = [
             "pago", "obligacion", "debe", "abonara", "pagara",
             "monto", "precio", "costo", "honorarios", "abonar",
@@ -122,29 +119,21 @@ class AnalisisWorkflow:
             "responsabilidad", "cargo", "locatario", "inquilino"
         ]
         
-        # Detectar analisis completo (solo si es explicitamente general)
-        if any(p in consulta for p in palabras_completo) and len(consulta.split()) < 5:
-            if consulta in ["analizar", "completo", "todos", "resumen"]:
-                logger.info("=== ROUTER: Usando agente COMPLETO ===")
-                return "completo"
-        
-        # Detectar OBLIGACIONES primero
+        # Detectar tipo de pregunta
         if any(p in consulta for p in palabras_obligaciones):
-            logger.info("=== ROUTER: Usando agente de OBLIGACIONES ===")
+            logger.info("=== ROUTER: Modo pregunta -> Usando agente OBLIGACIONES ===")
             return "obligaciones"
         
-        # Detectar RIESGOS
         if any(p in consulta for p in palabras_riesgo):
-            logger.info("=== ROUTER: Usando agente de RIESGOS ===")
+            logger.info("=== ROUTER: Modo pregunta -> Usando agente RIESGOS ===")
             return "riesgo"
         
-        # Detectar FECHAS
         if any(p in consulta for p in palabras_fechas):
-            logger.info("=== ROUTER: Usando agente de FECHAS ===")
+            logger.info("=== ROUTER: Modo pregunta -> Usando agente FECHAS ===")
             return "fechas"
         
-        # Por defecto
-        logger.info("=== ROUTER: Consulta general, usando agente COMPLETO ===")
+        # Si no se detecta tipo especifico, usar COMPLETO
+        logger.info("=== ROUTER: Modo pregunta sin tipo especifico, usando COMPLETO ===")
         return "completo"
     
     def _complete_node(self, estado: EstadoAnalisis) -> EstadoAnalisis:
@@ -165,7 +154,8 @@ class AnalisisWorkflow:
         logger.info("Agente Riesgo: analizando...")
         try:
             texto = estado.get("texto", "")
-            hallazgos = self.risk_agent.analizar(texto)
+            consulta = estado.get("consulta", "")
+            hallazgos = self.risk_agent.analizar(texto, contexto=consulta)
             estado["hallazgos"] = [h.to_dict() for h in hallazgos]
             estado["agente_usado"] = "riesgo"
             logger.info(f"Hallazgos: {len(estado['hallazgos'])}")
@@ -179,7 +169,8 @@ class AnalisisWorkflow:
         logger.info("Agente Fechas: extrayendo...")
         try:
             texto = estado.get("texto", "")
-            hallazgos = self.date_agent.analizar(texto)
+            consulta = estado.get("consulta", "")
+            hallazgos = self.date_agent.analizar(texto, contexto=consulta)
             estado["hallazgos"] = [h.to_dict() for h in hallazgos]
             estado["agente_usado"] = "fechas"
             logger.info(f"Hallazgos: {len(estado['hallazgos'])}")
@@ -193,7 +184,8 @@ class AnalisisWorkflow:
         logger.info("Agente Obligaciones: detectando...")
         try:
             texto = estado.get("texto", "")
-            hallazgos = self.obligation_agent.analizar(texto)
+            consulta = estado.get("consulta", "")
+            hallazgos = self.obligation_agent.analizar(texto, contexto=consulta)
             estado["hallazgos"] = [h.to_dict() for h in hallazgos]
             estado["agente_usado"] = "obligaciones"
             logger.info(f"Hallazgos: {len(estado['hallazgos'])}")
@@ -208,29 +200,37 @@ class AnalisisWorkflow:
         
         hallazgos = estado.get("hallazgos", [])
         agente = estado.get("agente_usado", "")
+        modo = estado.get("modo", "pregunta")
         
         if hallazgos and hallazgos[0].get("tipo") == "error":
             estado["resumen"] = ResponseFormatter.format_error(hallazgos[0].get("descripcion", "Error desconocido"))
             return estado
         
-        if agente == "fechas":
-            estado["resumen"] = ResponseFormatter.format_fechas(hallazgos)
-        elif agente == "riesgo":
-            estado["resumen"] = ResponseFormatter.format_riesgos(hallazgos)
-        elif agente == "obligaciones":
-            estado["resumen"] = ResponseFormatter.format_obligaciones(hallazgos)
-        else:
+        # Usar formateador segun el agente y el modo
+        if modo == "analisis":
+            # Siempre usar formato completo
             estado["resumen"] = ResponseFormatter.format_completo(hallazgos)
+        else:
+            # Usar formato especifico por agente
+            if agente == "fechas":
+                estado["resumen"] = ResponseFormatter.format_fechas(hallazgos)
+            elif agente == "riesgo":
+                estado["resumen"] = ResponseFormatter.format_riesgos(hallazgos)
+            elif agente == "obligaciones":
+                estado["resumen"] = ResponseFormatter.format_obligaciones(hallazgos)
+            else:
+                estado["resumen"] = ResponseFormatter.format_completo(hallazgos)
         
         estado["resultado_final"] = estado["resumen"]
         return estado
     
-    async def ejecutar(self, texto: str, consulta: Optional[str] = None) -> Dict[str, Any]:
-        logger.info(f"Ejecutando workflow con consulta: {consulta or 'general'}")
+    async def ejecutar(self, texto: str, consulta: Optional[str] = None, modo: str = "pregunta") -> Dict[str, Any]:
+        logger.info(f"Ejecutando workflow con consulta: {consulta or 'general'} (modo: {modo})")
         
         estado_inicial: EstadoAnalisis = {
             "texto": texto[:8000],
             "consulta": consulta,
+            "modo": modo,
             "hallazgos": [],
             "agente_usado": "",
             "errores": [],
@@ -255,10 +255,10 @@ class AnalisisWorkflow:
                 "resumen": f"Error en el analisis: {e}"
             }
     
-    def ejecutar_sync(self, texto: str, consulta: Optional[str] = None) -> Dict[str, Any]:
+    def ejecutar_sync(self, texto: str, consulta: Optional[str] = None, modo: str = "pregunta") -> Dict[str, Any]:
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        return loop.run_until_complete(self.ejecutar(texto, consulta))
+        return loop.run_until_complete(self.ejecutar(texto, consulta, modo))

@@ -22,37 +22,53 @@ class RiskDetectionAgent(BaseAgent):
         
         El usuario hizo la siguiente pregunta: "{pregunta}"
         
-        Analiza el contrato y responde SOLO lo que se pregunta.
+        Analiza el contrato y responde SOLO lo que se pregunta, de forma CONCISA.
         
         Texto del contrato:
         ---
         {texto[:3000]}
         ---
         
-        IMPORTANTE:
-        - Si pregunta por PENALIZACIONES, responde SOLO el porcentaje o monto.
-        - Si pregunta por RESCISION, responde SOLO los dias de aviso.
-        - NO devuelvas riesgos que no sean relevantes a la pregunta.
+        REGLAS ESTRICTAS:
+        1. Si pregunta "pueden rescindir el contrato?" -> Responde SOLO si se puede rescindir y con cuantos dias.
+        2. Si pregunta "cual es la penalizacion?" -> Responde SOLO el porcentaje de la multa.
+        3. Si pregunta "de cuanto es la multa?" -> Responde SOLO el porcentaje.
+        4. NO incluyas informacion sobre penalizaciones si la pregunta es sobre rescision.
+        5. NO incluyas informacion sobre rescision si la pregunta es sobre penalizaciones.
+        6. Devuelve SOLO 1 elemento, el mas relevante a la pregunta.
         
-        Responde SOLO con un array JSON. Cada elemento debe tener:
-        - tipo: string ("penalizacion", "rescision")
-        - descripcion: string (respuesta CONCISA)
-        - riesgo: string ("ALTO", "MEDIO", "BAJO")
-        - texto_relevante: string (la frase exacta)
-        - recomendacion: string (opcional)
-        
-        Ejemplo para "cual es la penalizacion?":
+        Responde SOLO con un array JSON de UN SOLO elemento:
         [
             {{
-                "tipo": "penalizacion",
-                "descripcion": "30% del valor total del contrato",
-                "riesgo": "ALTO",
-                "texto_relevante": "multa del 30% del valor total",
-                "recomendacion": ""
+                "tipo": string ("penalizacion" o "rescision"),
+                "descripcion": string (respuesta CONCISA a la pregunta),
+                "riesgo": string ("ALTO" o "MEDIO" o "BAJO"),
+                "texto_relevante": string (la frase exacta del contrato),
+                "recomendacion": string (opcional, solo si es necesario)
             }}
         ]
         
-        Devuelve SOLO 1 elemento si la pregunta es especifica.
+        Ejemplos:
+        
+        Pregunta: "pueden rescindir el contrato?"
+        Respuesta:
+        [{{
+            "tipo": "rescision",
+            "descripcion": "Si, cualquiera de las partes puede rescindir con 30 dias de aviso",
+            "riesgo": "MEDIO",
+            "texto_relevante": "Cualquiera de las partes podra rescindir el contrato con previo aviso de 30 dias",
+            "recomendacion": "Dar aviso por escrito con 30 dias de anticipacion"
+        }}]
+        
+        Pregunta: "cual es la penalizacion?"
+        Respuesta:
+        [{{
+            "tipo": "penalizacion",
+            "descripcion": "30% del valor total del contrato",
+            "riesgo": "ALTO",
+            "texto_relevante": "multa del 30% del valor total del contrato",
+            "recomendacion": ""
+        }}]
         """
         
         respuesta = self._call_llm(prompt)
@@ -63,8 +79,10 @@ class RiskDetectionAgent(BaseAgent):
         
         datos = self._parsear_respuesta_json(respuesta)
         
-        if contexto and len(datos) > 2:
-            datos = datos[:2]
+        # Limitar a 1 elemento para preguntas especificas
+        if contexto and len(datos) > 1:
+            logger.info(f"Limitando hallazgos de {len(datos)} a 1 para pregunta especifica")
+            datos = datos[:1]
         
         hallazgos = [self._crear_hallazgo(d) for d in datos]
         
