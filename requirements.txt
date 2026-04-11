@@ -30,3 +30,5 @@ numpy>=1.24,<2.0
 
 #pdf
 reportlab
+
+pyinstaller

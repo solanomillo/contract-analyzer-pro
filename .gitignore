@@ -44,3 +44,8 @@ temp_*.pdf
 *.key
 *.pem
 *.crt
+
+# PyInstaller
+build/
+dist/
+*.spec
