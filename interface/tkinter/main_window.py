@@ -1,6 +1,6 @@
 """
 Ventana principal de la aplicacion.
-Version simplificada: preguntas, texto del contrato y analisis completo.
+Version CORREGIDA: Todas las actualizaciones de UI en el hilo principal.
 """
 
 import logging
@@ -8,6 +8,7 @@ import os
 import sys
 import threading
 import time
+import re
 from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
@@ -19,12 +20,14 @@ from application.services.config_service import ConfigService
 from application.services.rag_service import RAGService
 from application.graph.workflow import AnalisisWorkflow
 from application.services.pdf_export_service import PDFExportService
+from application.services.conversation_memory import ConversationMemoryFactory
+from application.services.token_optimizer import get_token_optimizer
 
 logger = logging.getLogger(__name__)
 
 
 class MainWindow:
-    """Ventana principal de Contract Analyzer Pro."""
+    """Ventana principal de Contract Analyzer Pro - Con Chat Conversacional."""
     
     def __init__(self):
         """Inicializa la ventana principal."""
@@ -59,11 +62,15 @@ class MainWindow:
         
         self.current_contract_data = None
         self.current_pdf_path = None
+        self.current_model = None
         
         # Estado
         self.is_processing = False
         self.is_answering = False
         self.is_analyzing = False
+        
+        # Estado del chat
+        self.chat_session_id = None
         
         # Construir UI
         self._build_ui()
@@ -203,9 +210,9 @@ class MainWindow:
         tab_texto = tabview.add("Texto del Contrato")
         self._build_text_tab(tab_texto)
         
-        # Pestaña 2: Preguntar al Contrato
-        tab_preguntas = tabview.add("Preguntar al Contrato")
-        self._build_qa_tab(tab_preguntas)
+        # Pestaña 2: Chat con IA
+        tab_chat = tabview.add("Chat con IA")
+        self._build_chat_tab(tab_chat)
         
         # Pestaña 3: Analisis Legal
         tab_analisis = tabview.add("Analisis Legal")
@@ -232,48 +239,148 @@ class MainWindow:
         )
         self.stats_label.pack()
     
-    def _build_qa_tab(self, parent):
-        """Construye la pestaña de preguntas y respuestas."""
-        qa_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        qa_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    def _build_chat_tab(self, parent):
+        """Construye la pestaña de chat conversacional con memoria persistente."""
+        
+        # Frame principal
+        chat_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        chat_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Header del chat
+        header_frame = ctk.CTkFrame(chat_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 10))
         
         ctk.CTkLabel(
-            qa_frame,
-            text="Haz una pregunta sobre el contrato:",
-            font=ctk.CTkFont(size=14, weight="bold")
-        ).pack(anchor="w", pady=(10, 5))
+            header_frame,
+            text="Chat Inteligente con tu Contrato",
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(side="left")
         
-        self.question_entry = ctk.CTkTextbox(qa_frame, height=80, wrap="word")
-        self.question_entry.pack(fill="x", pady=(0, 10))
-        self.question_entry.insert("1.0", "Ejemplo: Cuanto es el pago mensual?")
+        # Información del modelo
+        self.chat_model_label = ctk.CTkLabel(
+            header_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="#888888"
+        )
+        self.chat_model_label.pack(side="left", padx=(10, 0))
         
-        btn_frame = ctk.CTkFrame(qa_frame, fg_color="transparent")
-        btn_frame.pack(fill="x", pady=(0, 15))
+        # Botones de control
+        btn_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        btn_frame.pack(side="right")
         
-        self.btn_ask = ctk.CTkButton(
+        self.btn_new_chat = ctk.CTkButton(
             btn_frame,
-            text="Preguntar",
-            command=self._ask_question,
-            width=150,
+            text="Nueva Conversacion",
+            command=self._new_conversation,
+            width=160,
+            height=32,
+            fg_color="#2ecc71",
+            hover_color="#27ae60",
             state="disabled"
         )
-        self.btn_ask.pack(side="left")
+        self.btn_new_chat.pack(side="left", padx=(0, 10))
         
-        self.qa_progress = ctk.CTkProgressBar(btn_frame, width=300)
-        self.qa_progress.pack(side="left", padx=(10, 0))
-        self.qa_progress.set(0)
-        self.qa_progress.pack_forget()
+        self.btn_clear_chat = ctk.CTkButton(
+            btn_frame,
+            text="Limpiar Chat",
+            command=self._clear_chat_display,
+            width=140,
+            height=32,
+            fg_color="#e74c3c",
+            hover_color="#c0392b",
+            state="disabled"
+        )
+        self.btn_clear_chat.pack(side="left")
         
-        ctk.CTkLabel(
-            qa_frame,
-            text="Respuesta:",
-            font=ctk.CTkFont(size=14, weight="bold")
-        ).pack(anchor="w", pady=(10, 5))
+        # Área de mensajes (scrollable)
+        self.chat_display = ctk.CTkTextbox(
+            chat_frame,
+            wrap="word",
+            font=ctk.CTkFont(size=13)
+        )
+        self.chat_display.pack(fill="both", expand=True, pady=(0, 10))
+        self.chat_display.insert("1.0", self._get_welcome_message())
+        self.chat_display.configure(state="disabled")
         
-        self.answer_text = ctk.CTkTextbox(qa_frame, wrap="word", height=150)
-        self.answer_text.pack(fill="x", pady=(0, 10))
-        self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
-        self.answer_text.configure(state="disabled")
+        # Frame de entrada
+        input_frame = ctk.CTkFrame(chat_frame, fg_color="transparent")
+        input_frame.pack(fill="x")
+        input_frame.grid_columnconfigure(0, weight=1)
+        
+        self.chat_entry = ctk.CTkTextbox(
+            input_frame,
+            height=80,
+            wrap="word",
+            font=ctk.CTkFont(size=13)
+        )
+        self.chat_entry.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        self.chat_entry.insert("1.0", "Escribe tu pregunta sobre el contrato...")
+        self.chat_entry.bind("<FocusIn>", self._on_chat_entry_focus)
+        self.chat_entry.bind("<Return>", self._on_chat_enter)
+        
+        # Botones de acción
+        action_frame = ctk.CTkFrame(input_frame, fg_color="transparent")
+        action_frame.grid(row=0, column=1, sticky="n")
+        
+        self.btn_send = ctk.CTkButton(
+            action_frame,
+            text="Enviar",
+            command=self._send_chat_message,
+            width=100,
+            height=40,
+            state="disabled"
+        )
+        self.btn_send.pack(pady=(0, 5))
+        
+        self.chat_status = ctk.CTkLabel(
+            action_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="#888888"
+        )
+        self.chat_status.pack()
+        
+        # Progress bar para chat
+        self.chat_progress = ctk.CTkProgressBar(action_frame, width=100)
+        self.chat_progress.set(0)
+        
+        # Bind para Ctrl+Enter
+        self.chat_entry.bind("<Control-Return>", lambda e: self._send_chat_message())
+    
+    def _get_welcome_message(self) -> str:
+        """Mensaje de bienvenida del chat."""
+        return """Asistente Legal IA - Listo para ayudarte
+
+Puedes hacer preguntas sobre el contrato cargado. El chat mantiene contexto de toda la conversacion.
+
+Ejemplos de preguntas:
+- Cuales son las obligaciones principales?
+- Que dice la clausula 3 sobre pagos?
+- Explicame los plazos de entrega
+- Hay clausulas de penalizacion?
+- Compara la seccion 5 con la seccion 8
+
+Consejos:
+- El chat recuerda todo lo que has preguntado antes
+- Puedes hacer preguntas de seguimiento como "Que dijiste sobre X?"
+- Usa "Nueva Conversacion" para empezar de cero
+
+---
+
+
+"""
+    
+    def _on_chat_entry_focus(self, event):
+        """Maneja el foco en el entry del chat."""
+        if self.chat_entry.get("1.0", "end-1c") == "Escribe tu pregunta sobre el contrato...":
+            self.chat_entry.delete("1.0", "end")
+    
+    def _on_chat_enter(self, event):
+        """Maneja Enter en el chat (sin Shift, envía mensaje)."""
+        if not event.state & 0x1:
+            self._send_chat_message()
+            return "break"
     
     def _build_analysis_tab(self, parent):
         """Construye la pestaña de analisis legal."""
@@ -295,7 +402,7 @@ class MainWindow:
         
         ctk.CTkLabel(
             analysis_frame,
-            text="• Riesgos y clausulas peligrosas\n• Fechas importantes (inicio, termino, plazos)\n• Obligaciones de pago y condiciones",
+            text="- Riesgos y clausulas peligrosas\n- Fechas importantes (inicio, termino, plazos)\n- Obligaciones de pago y condiciones",
             font=ctk.CTkFont(size=12),
             text_color="#888888",
             justify="left"
@@ -310,7 +417,7 @@ class MainWindow:
             command=self._start_analysis,
             width=220,
             height=45,
-            fg_color="#3498db",  # Azul
+            fg_color="#3498db",
             hover_color="#2980b9",
             font=ctk.CTkFont(size=13, weight="bold"),
             state="disabled"
@@ -375,11 +482,23 @@ class MainWindow:
             from application.graph.workflow import AnalisisWorkflow
             api_key = self.config_service.get_api_key()
             self.workflow = AnalisisWorkflow(api_key=api_key)
+            
+            model = self.config_service.get_model()
+            if model and self.rag_service:
+                self.rag_service.gemini_client.update_model(model)
+                self.current_model = model
+                self._update_chat_model_label()
+            
             self.status_label.configure(text="Configuracion actualizada")
             messagebox.showinfo("Exito", "Configuracion actualizada.")
         
         config = ConfigWindow(parent=self.root, on_config_saved=on_config_saved)
         config.run()
+    
+    def _update_chat_model_label(self):
+        """Actualiza la etiqueta del modelo en el chat."""
+        if hasattr(self, 'chat_model_label') and self.current_model:
+            self.chat_model_label.configure(text=f"Modelo: {self.current_model}")
     
     def _on_file_selected(self, pdf_path: Path):
         """Maneja seleccion de archivo."""
@@ -422,13 +541,16 @@ class MainWindow:
         )
     
     def _update_progress(self, mensaje: str):
+        """Actualiza el progreso - llamado desde hilo principal."""
         self.progress_card.update_progress(0.5, mensaje, "")
         self.status_label.configure(text=f"Procesando: {mensaje}")
     
     def _on_process_complete(self, resultado: dict):
+        """Maneja la finalizacion del procesamiento - EN HILO PRINCIPAL."""
         self.current_contract_data = resultado
         self.is_processing = False
         
+        # Actualizar UI
         self.file_upload.set_success(resultado["nombre_archivo"])
         self.progress_card.update_progress(1.0, "Indexando...", "")
         
@@ -441,14 +563,35 @@ class MainWindow:
                                                    f"Indexados {index_result['chunks_indexados']} chunks")
                 self.status_label.configure(text="Documento procesado")
                 
-                self.btn_ask.configure(state="normal")
+                # Habilitar botones
                 self.btn_analyze.configure(state="normal")
                 self.btn_export.configure(state="normal")
+                
+                # Habilitar chat
+                self.btn_send.configure(state="normal")
+                self.btn_new_chat.configure(state="normal")
+                self.btn_clear_chat.configure(state="normal")
+                
+                # Obtener modelo actual
+                self.current_model = self.config_service.get_model() or "gemini-2.0-flash"
+                self.rag_service.gemini_client.update_model(self.current_model)
+                self._update_chat_model_label()
+                
+                # Inicializar conversación
+                self.rag_service.initialize_conversation()
+                
+                # Mensaje de bienvenida en chat
+                self._append_to_chat("system", f"Contrato cargado: {resultado['nombre_archivo']}\n\nPuedes empezar a hacer preguntas.")
+                
+                if self.rag_service.contract_summary:
+                    self._append_to_chat("system", "Resumen del contrato generado automaticamente.")
             else:
                 self.status_label.configure(text="Indexacion fallida")
+                self._append_to_chat("system", "Error en la indexacion del contrato")
         except Exception as e:
             logger.error(f"Error en indexacion: {e}")
             self.status_label.configure(text="Error en indexacion")
+            self._append_to_chat("system", f"Error procesando contrato: {str(e)[:100]}")
         
         self._update_contract_info(resultado)
         self._update_preview(resultado)
@@ -456,6 +599,7 @@ class MainWindow:
         self.root.after(2000, self.progress_card.hide)
     
     def _on_process_error(self, error: str):
+        """Maneja error en procesamiento - EN HILO PRINCIPAL."""
         self.is_processing = False
         self.file_upload.set_loading(False)
         self.progress_card.hide()
@@ -470,6 +614,7 @@ class MainWindow:
             messagebox.showerror("Error", f"No se pudo procesar:\n{error}")
     
     def _update_contract_info(self, resultado: dict):
+        """Actualiza la informacion del contrato."""
         self.info_text.configure(state="normal")
         self.info_text.delete("1.0", "end")
         info = f"""Nombre: {resultado['nombre_archivo']}
@@ -495,76 +640,138 @@ Chunks: {resultado['total_chunks']}"""
             text=f"Total: {resultado['total_caracteres']} caracteres | {resultado['total_chunks']} chunks"
         )
     
-    def _ask_question(self):
-        """Realiza una pregunta sobre el contrato."""
+    # ==================== CHAT CONVERSACIONAL ====================
+    
+    def _new_conversation(self):
+        """Inicia una nueva conversación (limpia memoria)."""
         if not self.current_contract_data:
-            messagebox.showwarning("Advertencia", "Primero carga un contrato")
+            messagebox.showwarning("Sin contrato", "Carga un contrato primero")
             return
-
-        if self.is_answering:
-            messagebox.showwarning("En proceso", "Espera a que termine la respuesta actual")
-            return
-
-        pregunta = self.question_entry.get("1.0", "end-1c").strip()
-
-        if not pregunta:
-            messagebox.showwarning("Advertencia", "Escribe una pregunta")
-            return
-
-        self.is_answering = True
-        self.btn_ask.configure(state="disabled", text="Procesando...")
-        self.status_label.configure(text="Buscando...")
         
-        self.qa_progress.pack(side="left", padx=(10, 0))
-        self.qa_progress.set(0.2)
-
+        if messagebox.askyesno("Nueva Conversacion", "Iniciar nueva conversacion? Se perdera el historial actual."):
+            if self.rag_service:
+                self.rag_service.clear_conversation()
+                self.rag_service.initialize_conversation()
+            
+            self._clear_chat_display()
+            self.chat_status.configure(text="Nueva conversacion iniciada")
+            self.status_label.configure(text="Chat reiniciado")
+            self._append_to_chat("system", self._get_welcome_message())
+            self._append_to_chat("system", f"Contrato actual: {self.current_contract_data['nombre_archivo']}")
+    
+    def _clear_chat_display(self):
+        """Limpia solo el display del chat (no la memoria)."""
+        self.chat_display.configure(state="normal")
+        self.chat_display.delete("1.0", "end")
+        self.chat_display.insert("1.0", "")
+        self.chat_display.configure(state="disabled")
+    
+    def _append_to_chat(self, role: str, message: str):
+        """Agrega un mensaje al display del chat."""
+        self.chat_display.configure(state="normal")
+        
+        # Limpiar markdown
+        message_clean = re.sub(r'\*\*(.*?)\*\*', r'\1', message)
+        message_clean = re.sub(r'\*(.*?)\*', r'\1', message_clean)
+        
+        # Formato según rol
+        if role == "user":
+            prefix = "Tu: "
+            self.chat_display.tag_config("user_color", foreground="#3498db")
+            self.chat_display.insert("end", "\n\n" if self.chat_display.get("1.0", "end-1c") else "")
+            self.chat_display.insert("end", prefix)
+            self.chat_display.insert("end", message_clean, "user_color")
+        elif role == "assistant":
+            prefix = "Asistente: "
+            self.chat_display.tag_config("assistant_color", foreground="#2ecc71")
+            self.chat_display.insert("end", "\n\n" if self.chat_display.get("1.0", "end-1c") else "")
+            self.chat_display.insert("end", prefix)
+            self.chat_display.insert("end", message_clean, "assistant_color")
+        elif role == "system":
+            prefix = "Sistema: "
+            self.chat_display.tag_config("system_color", foreground="#f39c12")
+            self.chat_display.insert("end", "\n\n" if self.chat_display.get("1.0", "end-1c") else "")
+            self.chat_display.insert("end", prefix)
+            self.chat_display.insert("end", message_clean, "system_color")
+        
+        self.chat_display.see("end")
+        self.chat_display.configure(state="disabled")
+    
+    def _send_chat_message(self):
+        """Envía un mensaje al chat usando RAG con memoria."""
+        if not self.current_contract_data:
+            messagebox.showwarning("Sin contrato", "Primero carga un contrato")
+            return
+        
+        if self.is_answering:
+            self.chat_status.configure(text="Espera respuesta anterior...")
+            return
+        
+        pregunta = self.chat_entry.get("1.0", "end-1c").strip()
+        
+        if not pregunta or pregunta == "Escribe tu pregunta sobre el contrato...":
+            return
+        
+        self.chat_entry.delete("1.0", "end")
+        self._append_to_chat("user", pregunta)
+        
+        self.is_answering = True
+        self.btn_send.configure(state="disabled", text="Pensando...")
+        self.chat_status.configure(text="Procesando...")
+        self.chat_progress.pack(pady=(5, 0))
+        self.chat_progress.set(0.2)
+        
         def task():
             try:
-                if self.workflow is None:
-                    raise Exception("Sistema no disponible")
-
-                self.root.after(0, lambda: self.qa_progress.set(0.5))
-
-                resultado = self.workflow.ejecutar_sync(
-                    self.current_contract_data['texto_completo'],
-                    consulta=pregunta,
-                    tipo="pregunta"
+                if not self.rag_service.conversation_memory:
+                    self.root.after(0, lambda: self.rag_service.initialize_conversation())
+                
+                current_model = self.config_service.get_model()
+                if current_model and current_model != self.current_model:
+                    self.current_model = current_model
+                    self.rag_service.gemini_client.update_model(current_model)
+                    self.root.after(0, self._update_chat_model_label)
+                
+                self.root.after(0, lambda: self.chat_progress.set(0.5))
+                
+                resultado = self.rag_service.ask_question(
+                    question=pregunta,
+                    k=5,
+                    include_history=True,
+                    model=self.current_model
                 )
-
-                if resultado.get("exito"):
-                    respuesta = resultado.get("resumen", "No se obtuvo respuesta")
-                    self.root.after(0, lambda: self._show_answer(respuesta))
-                    return
+                
+                self.root.after(0, lambda: self.chat_progress.set(0.9))
+                
+                if resultado and resultado.get("respuesta"):
+                    respuesta = resultado["respuesta"]
+                    self.root.after(0, lambda: self._append_to_chat("assistant", respuesta))
+                    self.root.after(0, lambda: self.chat_status.configure(text="Respuesta completada"))
                 else:
-                    raise Exception(resultado.get("error", "Error desconocido"))
-
+                    error_msg = "No se pudo obtener respuesta. Verifica tu conexion."
+                    self.root.after(0, lambda: self._append_to_chat("assistant", error_msg))
+                    self.root.after(0, lambda: self.chat_status.configure(text="Error en respuesta"))
+                
             except Exception as e:
-                error = str(e)
-                logger.error(f"Error: {error}")
-
-                if "503" in error or "UNAVAILABLE" in error:
-                    respuesta = "Servidor de Gemini saturado. Intenta de nuevo en unos minutos."
+                logger.error(f"Error en chat: {e}")
+                error_msg = str(e)
+                if "503" in error_msg or "saturado" in error_msg.lower():
+                    respuesta = "El servicio de Gemini esta con alta demanda. Espera unos momentos y reintenta."
                 else:
-                    respuesta = f"Error: {error[:200]}"
-
-                self.root.after(0, lambda: self._show_answer(respuesta))
+                    respuesta = f"Error: {error_msg[:200]}"
+                self.root.after(0, lambda: self._append_to_chat("assistant", respuesta))
+                self.root.after(0, lambda: self.chat_status.configure(text="Error"))
+            
             finally:
-                self.root.after(0, lambda: self.qa_progress.set(1.0))
-                self.root.after(0, lambda: self.qa_progress.pack_forget())
-                self.root.after(0, self._reset_ask_button)
-
+                self.root.after(0, lambda: self.chat_progress.set(1.0))
+                self.root.after(0, lambda: self.chat_progress.pack_forget())
+                self.root.after(0, lambda: self.btn_send.configure(state="normal", text="Enviar"))
+                self.root.after(0, lambda: self.chat_status.configure(text=""))
+                self.root.after(0, lambda: setattr(self, 'is_answering', False))
+        
         threading.Thread(target=task, daemon=True).start()
     
-    def _reset_ask_button(self):
-        self.btn_ask.configure(state="normal", text="Preguntar")
-        self.status_label.configure(text="Listo")
-        self.is_answering = False
-    
-    def _show_answer(self, respuesta: str):
-        self.answer_text.configure(state="normal")
-        self.answer_text.delete("1.0", "end")
-        self.answer_text.insert("1.0", respuesta)
-        self.answer_text.configure(state="disabled")
+    # ==================== ANÁLISIS LEGAL ====================
     
     def _start_analysis(self):
         """Inicia el analisis legal completo."""
@@ -677,7 +884,7 @@ Chunks: {resultado['total_chunks']}"""
                 messagebox.showerror("Error", f"No se pudo exportar:\n{e}")
     
     def _on_clear(self):
-        """Limpia el contrato actual."""
+        """Limpia el contrato actual Y el chat."""
         if self.is_processing or self.is_analyzing or self.is_answering:
             messagebox.showwarning("En proceso", "Espera a que termine")
             return
@@ -687,6 +894,7 @@ Chunks: {resultado['total_chunks']}"""
         
         if self.rag_service:
             self.rag_service.clear()
+            self.rag_service.clear_conversation()
         
         self.info_text.configure(state="normal")
         self.info_text.delete("1.0", "end")
@@ -698,25 +906,23 @@ Chunks: {resultado['total_chunks']}"""
         self.preview_text.insert("1.0", "El texto del contrato aparecera aqui...")
         self.preview_text.configure(state="disabled")
         
-        self.answer_text.configure(state="normal")
-        self.answer_text.delete("1.0", "end")
-        self.answer_text.insert("1.0", "Las respuestas apareceran aqui...")
-        self.answer_text.configure(state="disabled")
-        
         self.analysis_text.configure(state="normal")
         self.analysis_text.delete("1.0", "end")
         self.analysis_text.insert("1.0", "Los resultados del analisis apareceran aqui...")
         self.analysis_text.configure(state="disabled")
         
-        self.question_entry.delete("1.0", "end")
-        self.question_entry.insert("1.0", "Ejemplo: Cuanto es el pago mensual?")
-        
         self.stats_label.configure(text="")
         self.status_label.configure(text="Sistema listo")
         
-        self.btn_ask.configure(state="disabled")
         self.btn_analyze.configure(state="disabled")
         self.btn_export.configure(state="disabled")
+        
+        # Limpiar chat
+        self.btn_send.configure(state="disabled")
+        self.btn_new_chat.configure(state="disabled")
+        self.btn_clear_chat.configure(state="disabled")
+        self._clear_chat_display()
+        self._append_to_chat("system", "Chat limpiado. Carga un nuevo contrato para comenzar.")
         
         self.file_upload.reset_state()
         self.file_upload.set_loading(False)
@@ -726,9 +932,13 @@ Chunks: {resultado['total_chunks']}"""
     
     def _on_closing(self):
         if self.is_processing or self.is_analyzing or self.is_answering:
-            if messagebox.askyesno("Salir", "Hay procesos en curso. ¿Salir?"):
+            if messagebox.askyesno("Salir", "Hay procesos en curso. Salir?"):
+                if self.rag_service and self.rag_service.conversation_memory:
+                    self.rag_service.save_conversation()
                 self.root.destroy()
         else:
+            if self.rag_service and self.rag_service.conversation_memory:
+                self.rag_service.save_conversation()
             self.root.destroy()
     
     def run(self):

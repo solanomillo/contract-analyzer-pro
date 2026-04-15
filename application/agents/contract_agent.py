@@ -1,178 +1,145 @@
 """
 Agente unificado para análisis de contratos.
-Maneja tanto preguntas específicas como análisis completos.
+REFACTORIZADO: Usa RAGService internamente con actualización dinámica de modelo.
 """
 
 import logging
-import re
 from typing import List, Optional
 from application.agents.base_agent import BaseAgent, Hallazgo
+from application.services.rag_service import RAGService
+from application.services.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
 
 
 class ContractAgent(BaseAgent):
     """
-    Agente unificado que maneja:
-    - Preguntas específicas (respuesta concreta)
-    - Análisis completo (respuesta detallada)
+    Agente unificado que maneja preguntas específicas y análisis completo.
+    REFACTORIZADO: Delega en RAGService con actualización dinámica de modelo.
     """
     
-    def analizar(self, texto: str, contexto: Optional[str] = None) -> List[Hallazgo]:
-        """
-        Analiza el contrato según el contexto.
+    def __init__(self, api_key: Optional[str] = None):
+        super().__init__(api_key)
+        self.config_service = ConfigService()
+        self.rag_service = RAGService()
         
-        Args:
-            texto: Texto del contrato
-            contexto: Puede ser:
-                - Una pregunta específica del usuario
-                - "analisis_completo" para análisis detallado
-        """
+        if api_key and self.config_service.get_api_key() != api_key:
+            self.config_service.actualizar_api_key(api_key)
+        
+        logger.info("ContractAgent refactorizado (usando RAGService)")
+    
+    def _get_current_model(self) -> str:
+        """Obtiene el modelo actual desde configuración."""
+        model = self.config_service.get_model()
+        if model:
+            self.rag_service.gemini_client.update_model(model)
+        return model or "gemini-2.0-flash"
+    
+    def analizar(self, texto: str, contexto: Optional[str] = None) -> List[Hallazgo]:
         es_analisis_completo = contexto == "analisis_completo"
         
+        if not self.rag_service.current_index_name and texto:
+            self._indexar_texto_temporal(texto)
+        
         if es_analisis_completo:
-            return self._analisis_completo(texto)
+            return self._analisis_completo_via_rag()
         else:
-            return self._respuesta_especifica(texto, contexto)
+            return self._respuesta_especifica_via_rag(contexto or "Analiza este contrato")
     
-    def _respuesta_especifica(self, texto: str, pregunta: str) -> List[Hallazgo]:
-        """Responde una pregunta específica de forma concreta."""
-        logger.info(f"Respondiendo pregunta específica: {pregunta}")
+    def _indexar_texto_temporal(self, texto: str):
+        from application.services.token_optimizer import get_token_optimizer
         
-        prompt = f"""
-        Actúa como un asistente legal experto en contratos.
+        logger.info(f"Indexando texto temporal de {len(texto)} caracteres")
         
-        El usuario pregunta: "{pregunta}"
+        optimizer = get_token_optimizer()
+        chunks = optimizer.chunk_text_intelligent(texto, max_tokens=2000, overlap_tokens=200)
         
-        Basado en este contrato, responde de forma CONCISA y DIRECTA.
-        Usa SOLO la información del contrato. No inventes información.
-        Responde en 1-2 líneas máximo. No des explicaciones largas.
+        contract_data = {
+            "nombre_archivo": "temp_analysis.txt",
+            "texto_completo": texto,
+            "chunks": [
+                {
+                    "texto": chunk.text, 
+                    "indice": i,
+                    "token_count": chunk.token_count
+                } 
+                for i, chunk in enumerate(chunks)
+            ]
+        }
         
-        Contrato:
-        ---
-        {texto[:4000]}
-        ---
-        
-        Responde SOLO con un array JSON con UN SOLO elemento:
-        [
-            {{
-                "tipo": "respuesta",
-                "descripcion": "tu respuesta concreta aqui",
-                "riesgo": "MEDIO",
-                "texto_relevante": "la frase del contrato que respalda tu respuesta",
-                "recomendacion": ""
-            }}
-        ]
-        """
-        
-        respuesta = self._call_llm(prompt)
-        
-        if not respuesta:
-            return [self._crear_hallazgo_error("No se pudo procesar la pregunta")]
-        
-        datos = self._parsear_respuesta_json(respuesta)
-        
-        if not datos:
-            return [self._crear_hallazgo_error("No se encontró información relevante")]
-        
-        hallazgos = [self._crear_hallazgo(d) for d in datos[:1]]
-        return hallazgos
+        self.rag_service.index_contract(contract_data)
+        logger.info(f"Texto temporal indexado: {len(chunks)} chunks")
     
-    def _analisis_completo(self, texto: str) -> List[Hallazgo]:
-        """Realiza un análisis completo y detallado del contrato."""
-        logger.info("Realizando análisis completo del contrato")
+    def _respuesta_especifica_via_rag(self, pregunta: str) -> List[Hallazgo]:
+        current_model = self._get_current_model()
+        logger.info(f"Respondiendo vía RAG con modelo {current_model}: {pregunta[:100]}...")
         
-        prompt = f"""
-        Actúa como un abogado experto en derecho contractual.
-        
-        Realiza un análisis COMPLETO y DETALLADO de este contrato.
-        
-        Contrato:
-        ---
-        {texto[:5000]}
-        ---
-        
-        Extrae y organiza la información en las siguientes categorías:
-        
-        1. RIESGOS Y CLAUSULAS PELIGROSAS:
-           - Penalizaciones económicas (porcentajes, montos exactos)
-           - Rescisión unilateral (condiciones, plazos exactos en días)
-           - Renovación automática
-           - Limitación de responsabilidad
-           - Cláusulas abusivas
-        
-        2. FECHAS IMPORTANTES (con formato día/mes/año):
-           - Fecha de inicio del contrato
-           - Fecha de término del contrato
-           - Plazos de pago (ej: "del día 1 al día 10 de cada mes")
-           - Plazos de preaviso (ej: "30 días")
-        
-        3. OBLIGACIONES DE LAS PARTES:
-           - Montos de pago (cantidad exacta)
-           - Plazos de pago
-           - Servicios a cargo (luz, agua, gas, etc.)
-           - Obligaciones de mantenimiento
-           - Restricciones de uso
-        
-        Para CADA hallazgo, incluye:
-        - tipo: string ("penalizacion", "rescision", "fecha_inicio", "fecha_termino", "plazo_pago", "preaviso", "obligacion_pago", "obligacion_servicios", "obligacion_mantenimiento")
-        - descripcion: string (explicación CLARA y CONCISA con datos exactos)
-        - riesgo: string ("ALTO", "MEDIO", "BAJO")
-        - texto_relevante: string (la frase EXACTA del contrato)
-        - recomendacion: string (qué debe hacer la parte, con acciones concretas)
-        
-        IMPORTANTE:
-        - Para fechas, escribe el día, mes y año completo
-        - Para plazos, escribe el número exacto de días
-        - Para montos, escribe la cantidad exacta con símbolo $
-        - Para servicios, enumera específicamente cuáles (luz, agua, gas, etc.)
-        
-        Responde SOLO con un array JSON. Ejemplo:
-        [
-            {{
-                "tipo": "fecha_inicio",
-                "descripcion": "El contrato comienza el 01 de enero de 2026",
-                "riesgo": "MEDIO",
-                "texto_relevante": "comenzando el 01 de enero de 2026",
-                "recomendacion": "Preparar documentación necesaria para la fecha de inicio"
-            }},
-            {{
-                "tipo": "plazo_pago",
-                "descripcion": "El pago debe realizarse entre el día 1 y el día 10 de cada mes",
-                "riesgo": "ALTO",
-                "texto_relevante": "El pago deberá realizarse del día 1 al día 10 de cada mes",
-                "recomendacion": "Configurar pago automático o recordatorio para no atrasarse"
-            }},
-            {{
-                "tipo": "obligacion_servicios",
-                "descripcion": "Los servicios de luz, agua y gas son a cargo del LOCATARIO",
-                "riesgo": "MEDIO",
-                "texto_relevante": "Los servicios (luz, agua, gas, etc.) estarán a cargo del LOCATARIO",
-                "recomendacion": "Solicitar el cambio de titularidad de los servicios a su nombre"
-            }}
-        ]
-        
-        Devuelve tantos elementos como hallazgos encuentres.
-        Si no encuentras algo, no lo incluyas.
-        """
-        
-        respuesta = self._call_llm(prompt)
-        
-        if not respuesta:
-            return [self._crear_hallazgo_error("Error en el análisis")]
-        
-        datos = self._parsear_respuesta_json(respuesta)
-        hallazgos = [self._crear_hallazgo(d) for d in datos]
-        
-        logger.info(f"Análisis completo generado: {len(hallazgos)} hallazgos")
-        return hallazgos
-    
-    def _crear_hallazgo_error(self, mensaje: str) -> Hallazgo:
-        """Crea un hallazgo de error."""
-        return Hallazgo(
-            tipo="error",
-            descripcion=mensaje,
-            riesgo="ALTO",
-            texto_relevante="",
-            recomendacion="Intenta nuevamente o reformula tu pregunta"
+        resultado = self.rag_service.ask_question(
+            question=pregunta,
+            k=5,
+            include_history=False,
+            model=current_model
         )
+        
+        respuesta = resultado.get("respuesta", "No se pudo obtener respuesta")
+        costo = resultado.get("costo_estimado_usd", 0)
+        
+        logger.info(f"Respuesta generada (costo: ${costo:.6f})")
+        
+        return [Hallazgo(
+            tipo="respuesta",
+            descripcion=respuesta[:1000],
+            riesgo="MEDIO",
+            texto_relevante="",
+            recomendacion="",
+            ubicacion=None
+        )]
+    
+    def _analisis_completo_via_rag(self) -> List[Hallazgo]:
+        current_model = self._get_current_model()
+        logger.info(f"Analizando completo vía RAG con modelo {current_model}")
+        
+        pregunta_analisis = """
+        Realiza un análisis legal COMPLETO y ESTRUCTURADO de este contrato.
+        
+        Incluye las siguientes secciones:
+        
+        1. RIESGOS Y CLÁUSULAS PELIGROSAS
+        2. FECHAS IMPORTANTES
+        3. OBLIGACIONES DE LAS PARTES
+        
+        Sé específico: incluye números, fechas exactas y montos cuando los encuentres.
+        """
+        
+        resultado = self.rag_service.ask_question(
+            question=pregunta_analisis,
+            k=10,
+            include_history=False,
+            model=current_model
+        )
+        
+        respuesta = resultado.get("respuesta", "No se pudo generar análisis")
+        costo = resultado.get("costo_estimado_usd", 0)
+        
+        logger.info(f"Análisis completo generado (costo: ${costo:.6f})")
+        
+        return [Hallazgo(
+            tipo="analisis_completo",
+            descripcion=respuesta,
+            riesgo="MEDIO",
+            texto_relevante="",
+            recomendacion="Revisar el análisis completo para más detalles",
+            ubicacion=None
+        )]
+    
+    def limpiar_cache(self):
+        if self.rag_service:
+            self.rag_service.clear()
+            logger.info("Caché del ContractAgent limpiado")
+    
+    def get_stats(self) -> dict:
+        return {
+            "rag_service": self.rag_service.get_stats() if self.rag_service else {},
+            "modelo_actual": self._get_current_model(),
+            "tiene_api_key": self.config_service.has_api_key()
+        }

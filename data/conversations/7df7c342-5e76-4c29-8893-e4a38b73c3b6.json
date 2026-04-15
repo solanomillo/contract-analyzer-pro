@@ -1,0 +1,19 @@
+{
+  "session_id": "7df7c342-5e76-4c29-8893-e4a38b73c3b6",
+  "created_at": "2026-04-14T17:09:57.046326",
+  "last_activity": "2026-04-14T17:10:53.039681",
+  "short_term_messages": [
+    {
+      "id": "a7671e73-4bd2-4ee0-9f61-2ffd67b68f72",
+      "role": "user",
+      "content": "de que tratá el contrtato?",
+      "timestamp": "2026-04-14T17:10:53.039681",
+      "token_count": 9,
+      "metadata": {
+        "timestamp": "2026-04-14T17:10:53.039681"
+      }
+    }
+  ],
+  "summaries": [],
+  "metadata": {}
+}

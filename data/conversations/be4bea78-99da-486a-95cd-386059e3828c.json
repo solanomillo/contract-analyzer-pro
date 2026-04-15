@@ -1,0 +1,53 @@
+{
+  "session_id": "be4bea78-99da-486a-95cd-386059e3828c",
+  "created_at": "2026-04-14T17:28:27.637182",
+  "last_activity": "2026-04-14T17:33:11.218013",
+  "short_term_messages": [
+    {
+      "id": "068b4799-882e-4f02-a049-843373581b70",
+      "role": "user",
+      "content": "de que trata el contrato?",
+      "timestamp": "2026-04-14T17:28:51.146595",
+      "token_count": 6,
+      "metadata": {
+        "timestamp": "2026-04-14T17:28:51.130974"
+      }
+    },
+    {
+      "id": "3cc71dbb-4765-4273-b33e-a14c09dc2c46",
+      "role": "assistant",
+      "content": "El contrato trata sobre el **alquiler (o arrendamiento) de un inmueble**.\n\n**Detalles:**\n*   **Partes:** Celebrado entre el Sr. Juan Perez (EL LOCADOR) y la Sra. Maria Gomez (EL LOCATARIO).\n*   **Objeto:** El LOCADOR da en alquiler al LOCATARIO el inmueble ubicado en Calle Falsa 123.\n\n**Referencias:**\n*   **Resumen Ejecutivo:** \"Tipo de Contrato: Contrato de Alquiler (o Arrendamiento) de un Inmueble.\" y \"Partes Involucradas: EL LOCADOR: Sr. Juan Perez, EL LOCATARIO: Sra. Maria Gomez\".\n*   **Contexto 1:** \"CONTRATO DE ALQUILER Entre el Sr. Juan Perez, en adelante EL LOCADOR, y la Sra. Maria Gomez, en adelante EL LOCATARIO...\" y \"1. OBJETO: El LOCADOR da en alquiler al LOCATARIO el inmueble ubicado en Calle Falsa 123.\"",
+      "timestamp": "2026-04-14T17:28:56.801757",
+      "token_count": 238,
+      "metadata": {
+        "response_time_ms": 5670.783,
+        "chunks_retrieved": 5,
+        "model": "gemini-2.5-flash"
+      }
+    },
+    {
+      "id": "c52e7372-4598-42a7-9782-f25f3f4280a1",
+      "role": "user",
+      "content": "cuáles son las obligaciones principales?",
+      "timestamp": "2026-04-14T17:33:04.214010",
+      "token_count": 9,
+      "metadata": {
+        "timestamp": "2026-04-14T17:33:04.198395"
+      }
+    },
+    {
+      "id": "ccc10c71-8d5e-41fe-a59d-d2538283d496",
+      "role": "assistant",
+      "content": "Las obligaciones principales son las siguientes:\n\n**Del LOCADOR:**\n*   Entregar en alquiler el inmueble ubicado en Calle Falsa 123.\n    *   *Referencia:* Resumen Ejecutivo (3. Obligaciones Principales) y Contexto 1 (Cláusula 1: \"OBJETO: El LOCADOR da en alquiler al LOCATARIO el inmueble ubicado en Calle Falsa 123.\").\n\n**Del LOCATARIO:**\n*   Abonar una suma mensual de $50.000.\n    *   *Referencia:* Resumen Ejecutivo (3. Obligaciones Principales) y Contexto 1 (Cláusula 3: \"PRECIO: El LOCATARIO abonará la suma de $50.000 (cincuenta mil pesos) mensuales.\").\n*   Realizar el pago entre el día 1 y 10 de cada mes.\n    *   *Referencia:* Resumen Ejecutivo (3. Obligaciones Principales) y Contexto 1 (Cláusula 4: \"FORMA DE PAGO: El pago deberá realizarse del día 1 al día 10 de cada mes.\").\n*   Mantener el inmueble en buen estado.\n    *   *Referencia:* Resumen Ejecutivo (3. Obligaciones Principales) y Contexto 1 (Cláusula 7: \"OBLIGACIONES DEL LOCATARIO: Mantener el inmueble en buen estado...\").\n*   Destinar el inmueble únicamente a uso habitacional.\n    *   *Referencia:* Resumen Ejecutivo (3. Obligaciones Principales) y Contexto 1 (Cláusula 7: \"...y destinarlo únicamente a uso habitacional.\").\n*   Pagar los servicios (luz, agua, gas, etc.).\n    *   *Referencia:* Resumen Ejecutivo (3. Obligaciones Principales) y Contexto 1 (Cláusula 8: \"SERVICIOS: Los servicios (luz, agua, gas, etc.) estarán a cargo del LOCATARIO.\").",
+      "timestamp": "2026-04-14T17:33:11.218013",
+      "token_count": 473,
+      "metadata": {
+        "response_time_ms": 7013.0,
+        "chunks_retrieved": 5,
+        "model": "gemini-2.5-flash"
+      }
+    }
+  ],
+  "summaries": [],
+  "metadata": {}
+}

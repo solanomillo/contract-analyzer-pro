@@ -205,3 +205,63 @@ CHUNK_OVERLAP=200
             if "quota" in error_msg or "exceeded" in error_msg:
                 return False, "Cuota de API agotada"
             return False, f"Error: {error_msg[:100]}"
+    
+    # ========== NUEVOS MÉTODOS PARA INTEGRACIÓN CON CHAT ==========
+    
+    def get_model(self) -> str:
+        """
+        Obtiene el modelo de chat actual.
+        
+        Returns:
+            Nombre del modelo (ej: "gemini-2.5-flash")
+        """
+        config = self.cargar_configuracion()
+        if config:
+            return config.modelo_chat
+        return "gemini-2.5-flash"
+    
+    def get_embedding_model(self) -> str:
+        """
+        Obtiene el modelo de embedding actual.
+        
+        Returns:
+            Nombre del modelo de embedding
+        """
+        config = self.cargar_configuracion()
+        if config:
+            return config.modelo_embedding
+        return "gemini-embedding-2-preview"
+    
+    def update_model(self, model_name: str) -> bool:
+        """
+        Actualiza el modelo de chat.
+        
+        Args:
+            model_name: Nuevo nombre del modelo
+            
+        Returns:
+            True si se actualizó correctamente
+        """
+        config = self.cargar_configuracion()
+        if config:
+            return self.guardar_configuracion(
+                config.api_key,
+                model_name,
+                config.modelo_embedding
+            )
+        return False
+    
+    def get_config_summary(self) -> dict:
+        """
+        Obtiene un resumen de la configuración actual.
+        
+        Returns:
+            Diccionario con información de configuración
+        """
+        config = self.cargar_configuracion()
+        return {
+            "has_api_key": self.has_api_key(),
+            "model_chat": config.modelo_chat if config else None,
+            "model_embedding": config.modelo_embedding if config else None,
+            "api_key_valid": config.es_valida if config else False
+        }

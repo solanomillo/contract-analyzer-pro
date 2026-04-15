@@ -1,0 +1,31 @@
+{
+  "session_id": "59d927f7-92a4-4a18-a5cd-5b9db1e05514",
+  "created_at": "2026-04-14T18:37:12.952372",
+  "last_activity": "2026-04-14T18:37:40.005979",
+  "short_term_messages": [
+    {
+      "id": "68e7171b-1b77-4eb7-9510-1a1702916c9e",
+      "role": "user",
+      "content": "de qué trata el contrato?",
+      "timestamp": "2026-04-14T18:37:34.084885",
+      "token_count": 6,
+      "metadata": {
+        "timestamp": "2026-04-14T18:37:34.084885"
+      }
+    },
+    {
+      "id": "7b3a1a7a-ce40-4670-89fa-5cd92f0c8c19",
+      "role": "assistant",
+      "content": "- El contrato es un Contrato de Alquiler.\n- Las partes son el Sr. Juan Perez (LOCADOR) y la Sra. Maria Gomez (LOCATARIO).\n- Trata sobre el alquiler del inmueble ubicado en Calle Falsa 123.\n- Establece un alquiler mensual de $50.000.\n- La duración es de 12 meses, del 01 de enero de 2026 al 31 de diciembre de 2026.\n- El LOCATARIO debe mantener el inmueble en buen estado, destinarlo a uso habitacional y pagar los servicios.\n- Permite la rescisión con 30 días de aviso previo.\n- Incluye una penalización del 30% del valor total del contrato en caso de incumplimiento.",
+      "timestamp": "2026-04-14T18:37:40.005979",
+      "token_count": 173,
+      "metadata": {
+        "response_time_ms": 5921.094,
+        "chunks_retrieved": 5,
+        "model": "gemini-2.5-flash"
+      }
+    }
+  ],
+  "summaries": [],
+  "metadata": {}
+}
